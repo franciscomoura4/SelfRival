@@ -10,7 +10,32 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-
+  
+  # State Management (MVVM)
+  flutter_riverpod: ^2.5.1
+  
+  # Navigation
+  go_router: ^13.2.0
+  
+  # UI & Visualization (Lab Requirement)
+  fl_chart: ^0.66.0
+  
+  # Device Capabilities (Lab Requirement)
+  geolocator: ^11.0.0
+  sensors_plus: ^5.0.1
+  
+  # Maps
+  google_maps_flutter: ^2.5.3
+  
+  # REST API (Lab Requirement)
+  http: ^1.2.0
+  
+  # Firebase (For later)
+  firebase_core: ^2.25.4
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.15.8
+  shared_preferences: ^2.5.5
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
