@@ -4,14 +4,12 @@ import '../../data/models/route_model.dart';
 import '../../data/rest_repository.dart';
 
 final restRepositoryProvider = Provider((ref) => RestRepository());
+final activePathProvider = StateProvider<List<LatLng>>((ref) => []);
+final targetRouteIdProvider = StateProvider<String?>((ref) => null); // 🟢 Knows if we are racing a Ghost!
 
-// Notice we use AsyncValue here to handle loading states automatically!
 class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
   final RestRepository _repository;
-
-  RouteViewModel(this._repository) : super(const AsyncValue.loading()) {
-    fetchRoutes();
-  }
+  RouteViewModel(this._repository) : super(const AsyncValue.loading()) { fetchRoutes(); }
 
   Future<void> fetchRoutes() async {
     state = const AsyncValue.loading();
@@ -23,25 +21,20 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
     }
   }
 
-  Future<void> saveNewRoute(String name, double distance, double timeInSeconds, List<LatLng> actualPath) async {
+  Future<void> saveNewRoute(String name, double distance, double timeInSeconds, double elevation, List<LatLng> actualPath) async {
     try {
-      final newRoute = RouteMaster(
-        id: '', // Firebase generates this
-        name: name.isEmpty ? 'New Route' : name,
-        distance: distance,
-        personalBestTime: timeInSeconds,
-        path: actualPath,
-      );
-
+      final newRoute = RouteMaster(id: '', name: name.isEmpty ? 'New Circuit' : name, distance: distance, personalBestTime: timeInSeconds, elevationGain: elevation, path: actualPath);
       final savedRoute = await _repository.createRoute(newRoute);
+      if (state is AsyncData) state = AsyncValue.data([...state.value!, savedRoute]);
+    } catch (e) { print("Error saving route: $e"); }
+  }
 
-      // Add the new route to the screen immediately
-      if (state is AsyncData) {
-        state = AsyncValue.data([...state.value!, savedRoute]);
-      }
-    } catch (e) {
-      print("Error saving route: $e");
-    }
+  //Update PB in Firebase and refresh state
+  Future<void> updatePersonalBest(String routeId, double newTime) async {
+    try {
+      await _repository.updateRoutePB(routeId, newTime);
+      fetchRoutes(); // Refresh the list so the new PB shows in the menu
+    } catch (e) { print("Error updating PB: $e"); }
   }
 }
 

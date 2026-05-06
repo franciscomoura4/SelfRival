@@ -5,6 +5,7 @@ class RouteMaster {
   final String name;
   final double distance;
   final double personalBestTime;
+  final double elevationGain; // 🟢 NEW: Strava-style altitude!
   final List<LatLng> path;
 
   RouteMaster({
@@ -12,6 +13,7 @@ class RouteMaster {
     required this.name,
     required this.distance,
     required this.personalBestTime,
+    required this.elevationGain,
     required this.path,
   });
 
@@ -24,6 +26,8 @@ class RouteMaster {
       name: json['name'] ?? 'Unnamed Route',
       distance: (json['distance'] as num).toDouble(),
       personalBestTime: (json['personalBestTime'] as num).toDouble(),
+      // Use ?? 0.0 so old runs without elevation don't crash the app!
+      elevationGain: (json['elevationGain'] as num?)?.toDouble() ?? 0.0,
       path: parsedPath,
     );
   }
@@ -33,6 +37,7 @@ class RouteMaster {
       'name': name,
       'distance': distance,
       'personalBestTime': personalBestTime,
+      'elevationGain': elevationGain,
       'path': path.map((p) => {'lat': p.latitude, 'lng': p.longitude}).toList(),
     };
   }
