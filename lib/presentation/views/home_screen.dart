@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
-import '../../data/mock_repository.dart';
 import '../../data/models/route_model.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/route_viewmodel.dart';
@@ -21,7 +20,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoadingLocation = true;
   String? _selectedRouteId;
 
-  // Default starting position (Lisbon)
   final CameraPosition _initialPosition = const CameraPosition(
     target: LatLng(38.7223, -9.1393),
     zoom: 13.0,
@@ -33,7 +31,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _getUserLocation();
   }
 
-  // --- THE CRASH-PROOF GPS WAKEUP ---
   Future<void> _getUserLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -41,7 +38,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         setState(() => _isLoadingLocation = false);
         return;
       }
-
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -50,7 +46,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return;
         }
       }
-
       if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
         Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
         _mapController?.animateCamera(
@@ -60,8 +55,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     } catch (e) {
-      // SAFETY NET: If the Android Emulator's fake GPS crashes (Error 20),
-      // the app safely ignores it and just uses the default map of Lisbon.
       debugPrint("Emulator GPS glitch caught safely: $e");
     } finally {
       setState(() => _isLoadingLocation = false);
@@ -94,13 +87,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final routes = ref.watch(routeProvider);
-    final user = MockRepository.currentUser;
+    final routesState = ref.watch(routeProvider);
+    final routes = routesState.value ?? []; // Safely extract the list
+    final user = ref.watch(authProvider); // Safely read user from AuthViewModel
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-
-      // --- THE SIDE MENU (DRAWER) ---
       drawer: Drawer(
         backgroundColor: Colors.grey.shade900,
         child: ListView(
@@ -127,8 +119,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 title: Text(route.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 subtitle: Text('${route.distance} km • PB: $minutes:${seconds.toString().padLeft(2, '0')}', style: const TextStyle(color: Colors.grey)),
                 onTap: () {
-                  Navigator.pop(context); // Close the menu
-                  _selectRoute(route);    // Select and fly to the route
+                  Navigator.pop(context);
+                  _selectRoute(route);
                 },
                 trailing: IconButton(
                   icon: const Icon(Icons.directions_run, color: Color(0xFF23A2D9)),
@@ -148,19 +140,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         elevation: 0,
         title: const Text('SelfRival', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () => context.push('/stats'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.redAccent),
-            onPressed: () => ref.read(authProvider.notifier).logout(),
-          ),
+          IconButton(icon: const Icon(Icons.bar_chart), onPressed: () => context.push('/stats')),
+          IconButton(icon: const Icon(Icons.logout, color: Colors.redAccent), onPressed: () => ref.read(authProvider.notifier).logout()),
           Padding(
             padding: const EdgeInsets.only(right: 16.0, left: 8.0),
             child: CircleAvatar(
               backgroundColor: const Color(0xFF23A2D9),
-              child: Text(user.name.substring(0, 1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              // Safely handle null user name here to prevent crashes
+              child: Text(user?.name.substring(0, 1) ?? 'U', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           )
         ],
@@ -181,6 +168,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onTap: (_) => setState(() => _selectedRouteId = null),
           ),
 
+          if (routesState.isLoading)
+            const Positioned(
+              top: 100, left: 0, right: 0,
+              child: Center(
+                child: Card(
+                  color: Colors.black87,
+                  child: Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Color(0xFF23A2D9), strokeWidth: 2)),
+                        SizedBox(width: 12),
+                        Text("Syncing Cloud Data...", style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -191,7 +199,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   if (_isLoadingLocation)
                     const Center(child: Padding(padding: EdgeInsets.only(bottom: 16.0), child: CircularProgressIndicator(color: Color(0xFF23A2D9)))),
 
-                  // Free Run Button
                   SizedBox(
                     height: 60,
                     child: ElevatedButton.icon(

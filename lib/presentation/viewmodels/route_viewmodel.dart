@@ -1,37 +1,50 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../data/models/route_model.dart';
-import '../../data/mock_repository.dart';
+import '../../data/rest_repository.dart';
 
-class RouteViewModel extends StateNotifier<List<RouteMaster>> {
-  RouteViewModel() : super([]) {
-    _loadRoutes();
+final restRepositoryProvider = Provider((ref) => RestRepository());
+
+// Notice we use AsyncValue here to handle loading states automatically!
+class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
+  final RestRepository _repository;
+
+  RouteViewModel(this._repository) : super(const AsyncValue.loading()) {
+    fetchRoutes();
   }
 
-  Future<void> _loadRoutes() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    state = MockRepository.myRoutes;
+  Future<void> fetchRoutes() async {
+    state = const AsyncValue.loading();
+    try {
+      final routes = await _repository.getRoutes();
+      state = AsyncValue.data(routes);
+    } catch (e, stackTrace) {
+      state = AsyncValue.error(e, stackTrace);
+    }
   }
 
-  Future<void> saveNewRoute(String name, double distance, double timeInSeconds) async {
-    final newRoute = RouteMaster(
-      id: 'route_${DateTime.now().millisecondsSinceEpoch}',
-      name: name.isEmpty ? 'Unnamed Route' : name,
-      personalBestTime: timeInSeconds,
-      distance: distance,
-      // Faking a newly drawn route path near the others
-      path: const [
-        LatLng(38.7369, -9.1426),
-        LatLng(38.7410, -9.1480),
-        LatLng(38.7450, -9.1500),
-      ],
-    );
+  Future<void> saveNewRoute(String name, double distance, double timeInSeconds, List<LatLng> actualPath) async {
+    try {
+      final newRoute = RouteMaster(
+        id: '', // Firebase generates this
+        name: name.isEmpty ? 'New Route' : name,
+        distance: distance,
+        personalBestTime: timeInSeconds,
+        path: actualPath,
+      );
 
-    MockRepository.myRoutes.add(newRoute);
-    state = [...state, newRoute];
+      final savedRoute = await _repository.createRoute(newRoute);
+
+      // Add the new route to the screen immediately
+      if (state is AsyncData) {
+        state = AsyncValue.data([...state.value!, savedRoute]);
+      }
+    } catch (e) {
+      print("Error saving route: $e");
+    }
   }
 }
 
-final routeProvider = StateNotifierProvider<RouteViewModel, List<RouteMaster>>((ref) {
-  return RouteViewModel();
+final routeProvider = StateNotifierProvider<RouteViewModel, AsyncValue<List<RouteMaster>>>((ref) {
+  return RouteViewModel(ref.read(restRepositoryProvider));
 });

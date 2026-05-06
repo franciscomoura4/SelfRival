@@ -25,7 +25,8 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
     ref.read(routeProvider.notifier).saveNewRoute(
       _nameController.text,
       5.2,
-      (26 * 60) + 10,
+      (26 * 60) + 10.0,
+      [], //missing 4th argument (an empty GPS path for now)
     );
 
     // Go back to the dashboard
@@ -76,7 +77,7 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _nameController, // Attached the controller here!
+              controller: _nameController,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 labelText: 'Route Name',
@@ -91,7 +92,7 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF23A2D9), foregroundColor: Colors.white),
-                onPressed: _saveRouteAndFinish, // Trigger the save function!
+                onPressed: _saveRouteAndFinish,
                 child: const Text('Save Route & Finish', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
