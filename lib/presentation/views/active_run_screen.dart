@@ -1,41 +1,120 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../core/tracking_service.dart';
+import '../viewmodels/route_viewmodel.dart';
+import '../../data/models/route_model.dart';
 
-class ActiveRunScreen extends ConsumerWidget {
+class ActiveRunScreen extends ConsumerStatefulWidget {
   final String? routeId;
 
   const ActiveRunScreen({super.key, this.routeId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isRacingRoute = routeId != null;
+  ConsumerState<ActiveRunScreen> createState() => _ActiveRunScreenState();
+}
+
+class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> {
+  GoogleMapController? _mapController;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final routes = ref.read(routeProvider).value ?? [];
+      RouteMaster? targetRoute;
+      try {
+        targetRoute = widget.routeId != null 
+            ? routes.firstWhere((r) => r.id == widget.routeId)
+            : null;
+      } catch (_) {
+        targetRoute = null;
+      }
+      
+      if (widget.routeId != null) {
+        ref.read(targetRouteIdProvider.notifier).state = widget.routeId;
+      }
+      
+      ref.read(trackingProvider.notifier).startTracking(targetRoute: targetRoute);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trackingState = ref.watch(trackingProvider);
+    final isRacingRoute = widget.routeId != null;
+    final routes = ref.watch(routeProvider).value ?? [];
+    
+    RouteMaster? targetRoute;
+    try {
+      targetRoute = isRacingRoute ? routes.firstWhere((r) => r.id == widget.routeId) : null;
+    } catch (_) {
+      targetRoute = null;
+    }
+
+    // Auto-center and zoom map on current position
+    if (trackingState.trackedPoints.isNotEmpty && _mapController != null) {
+      final currentPos = trackingState.trackedPoints.last.position;
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: currentPos,
+            zoom: 17.0,
+            tilt: 45.0,
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // TOP HALF: Map Area (Lab Requirement: Visualization/Device Capability)
+            // TOP HALF: Map Area
             Expanded(
               flex: 5,
               child: Stack(
                 children: [
-                  Container(
-                    color: Colors.grey[800],
-                    child: const Center(
-                      child: Text(
-                        'Google Maps / GPS Polyline Area\n(geolocator & google_maps_flutter)',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white70),
+                  GoogleMap(
+                    initialCameraPosition: const CameraPosition(target: LatLng(38.7223, -9.1393), zoom: 15),
+                    myLocationEnabled: true,
+                    zoomControlsEnabled: false,
+                    polylines: {
+                      if (targetRoute != null)
+                        Polyline(
+                          polylineId: const PolylineId('target_route'),
+                          points: targetRoute.points.map((p) => p.position).toList(),
+                          color: Colors.grey.withValues(alpha: 0.5),
+                          width: 6,
+                        ),
+                      Polyline(
+                        polylineId: const PolylineId('current_run'),
+                        points: trackingState.trackedPoints.map((p) => p.position).toList(),
+                        color: const Color(0xFF23A2D9),
+                        width: 5,
                       ),
-                    ),
+                    },
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                      final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+                      if (isDarkMode) {
+                        _mapController?.setMapStyle(_darkMapStyle);
+                      } else {
+                        _mapController?.setMapStyle(null);
+                      }
+                    },
                   ),
                   Positioned(
                     top: 16,
                     left: 16,
                     child: FloatingActionButton.small(
                       backgroundColor: Colors.white,
-                      onPressed: () => context.pop(),
+                      onPressed: () {
+                         ref.read(trackingProvider.notifier).stopTracking();
+                         context.pop();
+                      },
                       child: const Icon(Icons.arrow_back, color: Colors.black),
                     ),
                   ),
@@ -43,16 +122,41 @@ class ActiveRunScreen extends ConsumerWidget {
                     Positioned(
                       top: 16,
                       right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'RACING: Route PB',
-                          style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'ROUTE MODE',
+                              style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          if (trackingState.isOffRoute)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.warning, color: Colors.white, size: 16),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'OFF ROUTE',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                 ],
@@ -63,58 +167,85 @@ class ActiveRunScreen extends ConsumerWidget {
             Expanded(
               flex: 4,
               child: Container(
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
                 decoration: BoxDecoration(
                   color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(32),
+                    topRight: Radius.circular(32),
+                  ),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, -5))
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, -10),
+                    )
                   ],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Pacing Coach (Core Innovation feature)
-                    if (isRacingRoute)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.green),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.timer, color: Colors.green),
-                            SizedBox(width: 8),
-                            Text(
-                              'Pacing Coach: -0:05 (Ahead of PB!)',
-                              style: TextStyle(fontSize: 18, color: Colors.green, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
                       ),
-                    
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _StatView(label: 'Time', value: '12:34'),
-                        _StatView(label: 'Distance', value: '2.4 km'),
-                        _StatView(label: 'Pace', value: '5:14 /km'),
-                      ],
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _StatView(
+                              label: 'TIME', 
+                              value: _formatDuration(trackingState.elapsedTime)
+                            ),
+                          ),
+                          Expanded(
+                            child: _StatView(
+                              label: 'DISTANCE', 
+                              value: '${(trackingState.totalDistance / 1000).toStringAsFixed(2)}'
+                            ),
+                          ),
+                          Expanded(
+                            child: _StatView(
+                              label: 'PACE', 
+                              value: _formatPace(trackingState.currentPace).split(' ')[0]
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     
-                    SizedBox(
-                      height: 80,
-                      width: 80,
-                      child: FloatingActionButton(
-                        backgroundColor: Colors.redAccent,
-                        shape: const CircleBorder(),
-                        onPressed: () {
-                          // Stop run, save activity, navigate to Post-Run screen
-                          context.go('/post-run');
+                    Center(
+                      child: GestureDetector(
+                        onLongPress: () {
+                          final finalState = trackingState;
+                          ref.read(trackingProvider.notifier).stopTracking();
+                          ref.read(activePathProvider.notifier).state = finalState.trackedPoints.map((p) => p.position).toList();
+                          context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=${finalState.elevationGain}&isCompleted=${finalState.isRouteCompleted}');
                         },
-                        child: const Icon(Icons.stop, size: 40, color: Colors.white),
+                        child: Container(
+                          height: 80,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.redAccent.withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              )
+                            ],
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.stop_rounded, size: 32, color: Colors.white),
+                              Text('HOLD', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                       ),
                     )
                   ],
@@ -126,6 +257,33 @@ class ActiveRunScreen extends ConsumerWidget {
       ),
     );
   }
+
+  String _formatDuration(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String minutes = twoDigits(d.inMinutes.remainder(60));
+    String seconds = twoDigits(d.inSeconds.remainder(60));
+    return "$minutes:$seconds";
+  }
+
+  String _formatPace(double pace) {
+    if (pace == 0 || pace.isInfinite) return "-:--";
+    int minutes = (pace / 60).floor();
+    int seconds = (pace % 60).round();
+    return "$minutes:${seconds.toString().padLeft(2, '0')} /km";
+  }
+
+  final String _darkMapStyle = '''
+  [
+    {"elementType": "geometry","stylers": [{"color": "#212121"}]},
+    {"elementType": "labels.icon","stylers": [{"visibility": "off"}]},
+    {"elementType": "labels.text.fill","stylers": [{"color": "#757575"}]},
+    {"elementType": "labels.text.stroke","stylers": [{"color": "#212121"}]},
+    {"featureType": "administrative","elementType": "geometry","stylers": [{"color": "#757575"}]},
+    {"featureType": "road","elementType": "geometry.fill","stylers": [{"color": "#2c2c2c"}]},
+    {"featureType": "road","elementType": "labels.text.fill","stylers": [{"color": "#8a8a8a"}]},
+    {"featureType": "water","elementType": "geometry","stylers": [{"color": "#000000"}]}
+  ]
+  ''';
 }
 
 class _StatView extends StatelessWidget {
@@ -139,9 +297,25 @@ class _StatView extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+        Text(
+          value, 
+          style: TextStyle(
+            fontSize: 28, 
+            fontWeight: FontWeight.w900,
+            letterSpacing: -1,
+            color: Theme.of(context).colorScheme.onSurface,
+          )
+        ),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(
+          label, 
+          style: TextStyle(
+            color: Colors.grey[500], 
+            fontSize: 10, 
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          )
+        ),
       ],
     );
   }

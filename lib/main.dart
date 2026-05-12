@@ -19,14 +19,64 @@ class SelfRivalApp extends ConsumerWidget {
 
     return MaterialApp.router(
       title: 'SelfRival',
-      debugShowCheckedModeBanner: false, // Hides the annoying debug banner
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF23A2D9),
+          brightness: Brightness.light,
+          surface: Colors.grey[50]!,
+        ),
+        scaffoldBackgroundColor: Colors.grey[50]!,
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: Colors.black87,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.grey[200]!),
+          ),
+          color: Colors.white,
+        ),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF23A2D9),
           brightness: Brightness.dark,
+          surface: const Color(0xFF121212),
         ),
-        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+          ),
+          color: const Color(0xFF1E1E1E),
+        ),
       ),
+      themeMode: ThemeMode.system, // Follow system settings
       routerConfig: goRouter,
     );
   }

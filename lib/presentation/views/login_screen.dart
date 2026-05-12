@@ -15,11 +15,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _handleLogin() async {
     setState(() => isLoading = true);
 
-    // Call the ViewModel to handle the login logic
-    await ref.read(authProvider.notifier).login('test@test.com', 'password');
-
-    // We don't need to navigate manually! The Router will detect the
-    // state change automatically and redirect us to the Home Screen.
+    try {
+      // Call the ViewModel to handle the login logic
+      await ref.read(authProvider.notifier).login('test@test.com', 'password');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: Check your connection ($e)')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   @override

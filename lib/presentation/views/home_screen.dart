@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -117,7 +118,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               return ListTile(
                 leading: const Icon(Icons.map, color: Colors.grey),
                 title: Text(route.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: Text('${route.distance} km • PB: $minutes:${seconds.toString().padLeft(2, '0')}', style: const TextStyle(color: Colors.grey)),
+                subtitle: Text('${route.distance.toStringAsFixed(2)} km • PB: $minutes:${seconds.toString().padLeft(2, '0')}', style: const TextStyle(color: Colors.grey)),
                 onTap: () {
                   Navigator.pop(context);
                   _selectRoute(route);
@@ -136,18 +137,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
 
       appBar: AppBar(
-        backgroundColor: Colors.black87.withOpacity(0.7),
-        elevation: 0,
-        title: const Text('SelfRival', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Theme.of(context).brightness == Brightness.dark 
+            ? Colors.black.withValues(alpha: 0.7) 
+            : Colors.white.withValues(alpha: 0.7),
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(color: Colors.transparent),
+          ),
+        ),
+        title: const Text('SELRIVAL', style: TextStyle(letterSpacing: 2)),
         actions: [
-          IconButton(icon: const Icon(Icons.bar_chart), onPressed: () => context.push('/stats')),
-          IconButton(icon: const Icon(Icons.logout, color: Colors.redAccent), onPressed: () => ref.read(authProvider.notifier).logout()),
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF23A2D9).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.bar_chart, size: 20, color: Color(0xFF23A2D9)),
+            ),
+            onPressed: () => context.push('/stats'),
+          ),
+          const SizedBox(width: 8),
           Padding(
-            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
+            padding: const EdgeInsets.only(right: 16.0),
             child: CircleAvatar(
+              radius: 18,
               backgroundColor: const Color(0xFF23A2D9),
-              // Safely handle null user name here to prevent crashes
-              child: Text(user?.name.substring(0, 1) ?? 'U', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Text(
+                user?.name.substring(0, 1).toUpperCase() ?? 'U', 
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           )
         ],
@@ -163,7 +184,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             polylines: _buildPolylines(routes),
             onMapCreated: (controller) {
               _mapController = controller;
-              _mapController?.setMapStyle(_darkMapStyle);
+              final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+              if (isDarkMode) {
+                _mapController?.setMapStyle(_darkMapStyle);
+              } else {
+                _mapController?.setMapStyle(null); // Reset to default/light
+              }
             },
             onTap: (_) => setState(() => _selectedRouteId = null),
           ),
@@ -200,17 +226,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const Center(child: Padding(padding: EdgeInsets.only(bottom: 16.0), child: CircularProgressIndicator(color: Color(0xFF23A2D9)))),
 
                   SizedBox(
-                    height: 60,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.directions_run, size: 28),
-                      label: const Text('Start Free Run', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    height: 64,
+                    child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF23A2D9),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 8,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
                       ),
                       onPressed: () => context.push('/run'),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.play_arrow_rounded, size: 32),
+                          SizedBox(width: 8),
+                          Text('START FREE RUN', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                        ],
+                      ),
                     ),
                   ),
                 ],

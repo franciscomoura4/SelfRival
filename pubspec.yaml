@@ -29,6 +29,9 @@ dependencies:
   
   # REST API (Lab Requirement)
   http: ^1.2.0
+
+  # Audio Feedback
+  flutter_tts: ^4.0.2
   
   # Firebase (For later)
   firebase_core: ^2.25.4

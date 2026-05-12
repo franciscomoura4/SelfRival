@@ -19,7 +19,7 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _positionStream;
 
-  List<LatLng> _currentPath = [];
+  final List<LatLng> _currentPath = [];
   double _totalDistanceKm = 0.0;
   double _elevationGain = 0.0; //ALTTITUDE TRACKER
   double? _lastAltitude;

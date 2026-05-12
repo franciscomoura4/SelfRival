@@ -26,6 +26,7 @@ class AuthViewModel extends StateNotifier<AppUser?> {
       state = user;
     } catch (e) {
       print("Login failed: $e");
+      rethrow; // Propagate error so UI can handle it
     }
   }
 

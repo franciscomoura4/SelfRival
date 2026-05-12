@@ -9,8 +9,15 @@ class PostRunScreen extends ConsumerStatefulWidget {
   final double distance;
   final int time;
   final double elevation;
+  final bool isCompleted;
 
-  const PostRunScreen({super.key, this.distance = 0.0, this.time = 0, this.elevation = 0.0});
+  const PostRunScreen({
+    super.key, 
+    this.distance = 0.0, 
+    this.time = 0, 
+    this.elevation = 0.0,
+    this.isCompleted = false,
+  });
 
   @override
   ConsumerState<PostRunScreen> createState() => _PostRunScreenState();
@@ -25,8 +32,8 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
     super.dispose();
   }
 
-  void _saveNewCircuit(List<LatLng> path) {
-    ref.read(routeProvider.notifier).saveNewRoute(_nameController.text, widget.distance, widget.time.toDouble(), widget.elevation, path);
+  void _saveNewCircuit(List<RoutePoint> points) {
+    ref.read(routeProvider.notifier).saveNewRoute(_nameController.text, widget.distance, widget.time.toDouble(), widget.elevation, points);
     ref.read(targetRouteIdProvider.notifier).state = null; // Clear state
     context.go('/');
   }
@@ -39,7 +46,16 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final path = ref.watch(activePathProvider);
+    final rawPath = ref.watch(activePathProvider);
+    // Convert to RoutePoints if needed, but for simplicity here we assume activePathProvider
+    // was updated to hold enough info OR we reconstruct basic RoutePoints
+    final points = rawPath.map((p) => RoutePoint(
+      position: p, 
+      timestamp: 0, // Placeholder if not available
+      distance: 0, 
+      altitude: 0
+    )).toList();
+
     final targetRouteId = ref.watch(targetRouteIdProvider);
     final routes = ref.watch(routeProvider).value ?? [];
 
@@ -57,9 +73,9 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
     final seconds = (widget.time % 60).toString().padLeft(2, '0');
 
     LatLngBounds? bounds;
-    if (path.isNotEmpty) {
+    if (rawPath.isNotEmpty) {
       double? minLat, maxLat, minLng, maxLng;
-      for (var point in path) {
+      for (var point in rawPath) {
         if (minLat == null || point.latitude < minLat) minLat = point.latitude;
         if (maxLat == null || point.latitude > maxLat) maxLat = point.latitude;
         if (minLng == null || point.longitude < minLng) minLng = point.longitude;
@@ -78,13 +94,16 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
             // MAP VISUALIZER
             Container(
               height: 200, decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF23A2D9), width: 2)), clipBehavior: Clip.antiAlias,
-              child: path.isEmpty
+              child: rawPath.isEmpty
                   ? const Center(child: Text("No GPS data recorded.", style: TextStyle(color: Colors.grey)))
                   : GoogleMap(
-                initialCameraPosition: CameraPosition(target: path.first, zoom: 15), zoomControlsEnabled: false,
-                polylines: {Polyline(polylineId: const PolylineId('summary'), points: path, color: const Color(0xFF23A2D9), width: 5)},
+                initialCameraPosition: CameraPosition(target: rawPath.first, zoom: 15), zoomControlsEnabled: false,
+                polylines: {Polyline(polylineId: const PolylineId('summary'), points: rawPath, color: const Color(0xFF23A2D9), width: 5)},
                 onMapCreated: (controller) {
-                  controller.setMapStyle('[{"elementType":"geometry","stylers":[{"color":"#212121"}]},{"elementType":"labels.icon","stylers":[{"visibility":"off"}]},{"elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},{"featureType":"road","elementType":"geometry.fill","stylers":[{"color":"#2c2c2c"}]},{"featureType":"water","elementType":"geometry","stylers":[{"color":"#000000"}]}]');
+                  final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+                  if (isDarkMode) {
+                    controller.setMapStyle('[{"elementType":"geometry","stylers":[{"color":"#212121"}]},{"elementType":"labels.icon","stylers":[{"visibility":"off"}]},{"elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},{"featureType":"road","elementType":"geometry.fill","stylers":[{"color":"#2c2c2c"}]},{"featureType":"water","elementType":"geometry","stylers":[{"color":"#000000"}]}]');
+                  }
                   if (bounds != null) Future.delayed(const Duration(milliseconds: 500), () => controller.animateCamera(CameraUpdate.newLatLngBounds(bounds!, 30)));
                 },
               ),
@@ -112,32 +131,60 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
               const SizedBox(height: 16),
               TextField(controller: _nameController, decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Circuit Name', prefixIcon: Icon(Icons.edit_road))),
               const SizedBox(height: 24),
-              SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF23A2D9), foregroundColor: Colors.white), onPressed: () => _saveNewCircuit(path), child: const Text('Save to Cloud', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
+              SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF23A2D9), foregroundColor: Colors.white), onPressed: () => _saveNewCircuit(points), child: const Text('Save to Cloud', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
             ] else ...[
               const Text('Circuit Results', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
 
-              Text('Target: ${targetRoute!.name}', style: const TextStyle(color: Colors.grey, fontSize: 16)),
+              Text('Target: ${targetRoute.name}', style: const TextStyle(color: Colors.grey, fontSize: 16)),
               const SizedBox(height: 16),
 
               // PB COMPARISON BANNER
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: isNewPB ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2), borderRadius: BorderRadius.circular(12), border: Border.all(color: isNewPB ? Colors.green : Colors.red)),
+                decoration: BoxDecoration(
+                  color: !widget.isCompleted 
+                      ? Colors.orange.withOpacity(0.2)
+                      : (isNewPB ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2)),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: !widget.isCompleted 
+                        ? Colors.orange 
+                        : (isNewPB ? Colors.green : Colors.red)
+                  ),
+                ),
                 child: Row(
                   children: [
-                    Icon(isNewPB ? Icons.emoji_events : Icons.timer_off, color: isNewPB ? Colors.green : Colors.red, size: 32),
+                    Icon(
+                      !widget.isCompleted 
+                          ? Icons.warning_amber_rounded
+                          : (isNewPB ? Icons.emoji_events : Icons.timer_off), 
+                      color: !widget.isCompleted 
+                          ? Colors.orange 
+                          : (isNewPB ? Colors.green : Colors.red), 
+                      size: 32
+                    ),
                     const SizedBox(width: 16),
                     Expanded(child: Text(
-                      isNewPB ? 'NEW PERSONAL BEST!\nYou beat your time by ${timeDiff.abs().toInt()} seconds.' : 'Slower than PB.\nYou were ${timeDiff.toInt()} seconds behind.',
-                      style: TextStyle(color: isNewPB ? Colors.green : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16),
+                      !widget.isCompleted
+                          ? 'ROUTE NOT COMPLETED\nYou must pass all checkpoints to update your PB.'
+                          : (isNewPB 
+                              ? 'NEW PERSONAL BEST!\nYou beat your time by ${timeDiff.abs().toInt()} seconds.' 
+                              : 'Slower than PB.\nYou were ${timeDiff.toInt()} seconds behind.'),
+                      style: TextStyle(
+                        color: !widget.isCompleted 
+                            ? Colors.orange 
+                            : (isNewPB ? Colors.green : Colors.redAccent), 
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 16
+                      ),
                     )),
                   ],
                 ),
               ),
               const SizedBox(height: 32),
 
-              if (isNewPB)
+              if (isNewPB && widget.isCompleted)
                 SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white), onPressed: () => _updatePB(targetRoute!.id), child: const Text('Update Cloud PB', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))))
               else
                 SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade800, foregroundColor: Colors.white), onPressed: () { ref.read(targetRouteIdProvider.notifier).state = null; context.go('/'); }, child: const Text('Save Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),

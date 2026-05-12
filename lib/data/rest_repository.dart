@@ -19,7 +19,9 @@ class RestRepository {
         routes.add(RouteMaster.fromJson(routeData));
       });
       return routes;
-    } else throw Exception('Failed to load routes');
+    } else {
+      throw Exception('Failed to load routes');
+    }
   }
 
   Future<RouteMaster> createRoute(RouteMaster route) async {
@@ -30,8 +32,10 @@ class RestRepository {
     );
     if (response.statusCode == 200) {
       final newId = json.decode(response.body)['name'];
-      return RouteMaster(id: newId, name: route.name, distance: route.distance, personalBestTime: route.personalBestTime, elevationGain: route.elevationGain, path: route.path);
-    } else throw Exception('Failed to upload route');
+      return RouteMaster(id: newId, name: route.name, distance: route.distance, personalBestTime: route.personalBestTime, elevationGain: route.elevationGain, points: route.points);
+    } else {
+      throw Exception('Failed to upload route');
+    }
   }
 
   // Update an existing route if they beat their PB!
@@ -52,6 +56,8 @@ class RestRepository {
     );
     if (response.statusCode == 200) {
       return AppUser(id: json.decode(response.body)['name'], name: name, email: email);
-    } else throw Exception('Failed to auth user');
+    } else {
+      throw Exception('Failed to auth user');
+    }
   }
 }

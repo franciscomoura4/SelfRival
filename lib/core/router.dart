@@ -50,8 +50,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-          path: '/post-run',
-          builder: (context, state) => const PostRunScreen()
+        path: '/post-run',
+        builder: (context, state) {
+          final distance = double.tryParse(state.uri.queryParameters['distance'] ?? '0.0') ?? 0.0;
+          final time = int.tryParse(state.uri.queryParameters['time'] ?? '0') ?? 0;
+          final elevation = double.tryParse(state.uri.queryParameters['elevation'] ?? '0.0') ?? 0.0;
+          final isCompleted = state.uri.queryParameters['isCompleted'] == 'true';
+          return PostRunScreen(distance: distance, time: time, elevation: elevation, isCompleted: isCompleted);
+        },
       ),
       GoRoute(
           path: '/stats',

@@ -21,9 +21,16 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
     }
   }
 
-  Future<void> saveNewRoute(String name, double distance, double timeInSeconds, double elevation, List<LatLng> actualPath) async {
+  Future<void> saveNewRoute(String name, double distance, double timeInSeconds, double elevation, List<RoutePoint> points) async {
     try {
-      final newRoute = RouteMaster(id: '', name: name.isEmpty ? 'New Circuit' : name, distance: distance, personalBestTime: timeInSeconds, elevationGain: elevation, path: actualPath);
+      final newRoute = RouteMaster(
+        id: '', 
+        name: name.isEmpty ? 'New Circuit' : name, 
+        distance: distance, 
+        personalBestTime: timeInSeconds, 
+        elevationGain: elevation, 
+        points: points
+      );
       final savedRoute = await _repository.createRoute(newRoute);
       if (state is AsyncData) state = AsyncValue.data([...state.value!, savedRoute]);
     } catch (e) { print("Error saving route: $e"); }
