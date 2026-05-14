@@ -1,10 +1,13 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router.dart';
+import 'firebase_options.dart';
 
-void main() {
+Future<void> main() async {
   // Essential for loading native plugins like Maps/Sensors before UI draws
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(const ProviderScope(child: SelfRivalApp()));
 }

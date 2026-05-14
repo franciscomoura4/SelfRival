@@ -162,12 +162,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(width: 8),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFF23A2D9),
-              child: Text(
-                user?.name.substring(0, 1).toUpperCase() ?? 'U', 
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            child: GestureDetector(
+              onTap: () => context.push('/profile'),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFF23A2D9),
+                child: Text(
+                  (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : 'U', 
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
               ),
             ),
           )

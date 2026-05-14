@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../data/models/route_model.dart';
 import '../../data/rest_repository.dart';
+import 'auth_viewmodel.dart';
 
 final restRepositoryProvider = Provider((ref) => RestRepository());
 final activePathProvider = StateProvider<List<LatLng>>((ref) => []);
@@ -9,12 +10,13 @@ final targetRouteIdProvider = StateProvider<String?>((ref) => null); // 🟢 Kno
 
 class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
   final RestRepository _repository;
-  RouteViewModel(this._repository) : super(const AsyncValue.loading()) { fetchRoutes(); }
+  final String _uid;
+  RouteViewModel(this._repository, this._uid) : super(const AsyncValue.loading()) { fetchRoutes(); }
 
   Future<void> fetchRoutes() async {
     state = const AsyncValue.loading();
     try {
-      final routes = await _repository.getRoutes();
+      final routes = await _repository.getRoutes(_uid);
       state = AsyncValue.data(routes);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
@@ -31,7 +33,7 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
         elevationGain: elevation, 
         points: points
       );
-      final savedRoute = await _repository.createRoute(newRoute);
+      final savedRoute = await _repository.createRoute(_uid, newRoute);
       if (state is AsyncData) state = AsyncValue.data([...state.value!, savedRoute]);
     } catch (e) { print("Error saving route: $e"); }
   }
@@ -39,12 +41,14 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<RouteMaster>>> {
   //Update PB in Firebase and refresh state
   Future<void> updatePersonalBest(String routeId, double newTime) async {
     try {
-      await _repository.updateRoutePB(routeId, newTime);
+      await _repository.updateRoutePB(_uid, routeId, newTime);
       fetchRoutes(); // Refresh the list so the new PB shows in the menu
     } catch (e) { print("Error updating PB: $e"); }
   }
 }
 
 final routeProvider = StateNotifierProvider<RouteViewModel, AsyncValue<List<RouteMaster>>>((ref) {
-  return RouteViewModel(ref.read(restRepositoryProvider));
+  final user = ref.watch(authProvider);
+  final uid = user?.id ?? '';
+  return RouteViewModel(ref.read(restRepositoryProvider), uid);
 });

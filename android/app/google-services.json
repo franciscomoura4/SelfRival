@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "946133701885",
+    "firebase_url": "https://selfrival-59aff-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "selfrival-59aff",
+    "storage_bucket": "selfrival-59aff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:946133701885:android:fbe767e445e797a7421a94",
+        "android_client_info": {
+          "package_name": "com.company.selfrival"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrz3zkZFiwVBU2BmOXRki1IMIJ8peRuUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:946133701885:android:b4293e2f07f79158421a94",
+        "android_client_info": {
+          "package_name": "com.selfrival.selfrival"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrz3zkZFiwVBU2BmOXRki1IMIJ8peRuUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

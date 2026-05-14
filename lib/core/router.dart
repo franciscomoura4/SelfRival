@@ -7,6 +7,7 @@ import '../presentation/views/active_run_screen.dart';
 import '../presentation/views/post_run_screen.dart';
 import '../presentation/views/statistics_screen.dart';
 import '../presentation/views/login_screen.dart';
+import '../presentation/views/profile_screen.dart';
 
 // ViewModels
 import '../presentation/viewmodels/auth_viewmodel.dart';
@@ -62,6 +63,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/stats',
           builder: (context, state) => const StatisticsScreen()
+      ),
+      GoRoute(
+          path: '/profile',
+          builder: (context, state) => const ProfileScreen()
       ),
     ],
   );
