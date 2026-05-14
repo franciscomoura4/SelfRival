@@ -42,6 +42,13 @@ class AuthViewModel extends StateNotifier<AppUser?> {
   }
 
   Future<void> sendPasswordReset(String email) async {
+    // NOTE: For this check to work, "Email Enumeration Protection" must be
+    // disabled in Firebase Console → Authentication → Settings → User actions.
+    // With it enabled, fetchSignInMethodsForEmail always returns [] (by design).
+    final methods = await _auth.fetchSignInMethodsForEmail(email);
+    if (methods.isEmpty) {
+      throw FirebaseAuthException(code: 'user-not-found');
+    }
     await _auth.sendPasswordResetEmail(email: email);
   }
 
