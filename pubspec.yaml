@@ -35,9 +35,9 @@ dependencies:
   flutter_tts: ^4.0.2
 
   # Firebase
-  firebase_core: ^2.25.4
-  firebase_auth: ^4.17.4
-  cloud_firestore: ^4.15.8
+  firebase_core: ^4.9.0
+  firebase_auth: ^6.5.1
+  cloud_firestore: ^6.4.1
   shared_preferences: ^2.5.5
 
 dev_dependencies:
