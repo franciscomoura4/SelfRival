@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:go_router/go_router.dart';
 import '../viewmodels/route_viewmodel.dart';
 import '../../data/models/route_model.dart';
 
@@ -10,7 +11,7 @@ class StatisticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final routesAsync = ref.watch(routeProvider);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('PERFORMANCE', style: TextStyle(letterSpacing: 2)),
@@ -26,10 +27,7 @@ class StatisticsScreen extends ConsumerWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF23A2D9).withValues(alpha: 0.05),
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF23A2D9).withOpacity(0.05), shape: BoxShape.circle),
                     child: const Icon(Icons.analytics_outlined, size: 48, color: Color(0xFF23A2D9)),
                   ),
                   const SizedBox(height: 24),
@@ -61,21 +59,18 @@ class StatisticsScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                
-                _PaceLineChart(route: primaryRoute),
-                
+
+                PaceLineChart(route: primaryRoute),
+
                 const SizedBox(height: 32),
-                
-                const Text(
-                  'INSIGHTS',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5),
-                ),
+
+                const Text('INSIGHTS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
                 const SizedBox(height: 16),
-                
+
                 Row(
                   children: [
                     Expanded(
-                      child: _ImpactCardSmall(
+                      child: ImpactCardSmall(
                         icon: Icons.terrain_rounded,
                         color: Colors.orange,
                         value: '${primaryRoute.elevationGain.toStringAsFixed(0)}m',
@@ -84,21 +79,20 @@ class StatisticsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _ImpactCardSmall(
+                      child: ImpactCardSmall(
                         icon: Icons.speed_rounded,
                         color: Colors.green,
-                        value: '${((primaryRoute.distance / primaryRoute.personalBestTime) * 3.6).toStringAsFixed(1)}',
+                        value: (primaryRoute.personalBestTime > 0)
+                            ? ((primaryRoute.distance / primaryRoute.personalBestTime) * 3.6).toStringAsFixed(1)
+                            : '0.0',
                         label: 'Avg km/h',
                       ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 40),
-                const Text(
-                  'ROUTE MASTERS',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5),
-                ),
+                const Text('ROUTE MASTERS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
                 const SizedBox(height: 16),
                 ListView.builder(
                   shrinkWrap: true,
@@ -113,23 +107,18 @@ class StatisticsScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: Theme.of(context).cardColor,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
+                        border: Border.all(color: Colors.grey.withOpacity(0.1)),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         leading: Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF23A2D9).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          decoration: BoxDecoration(color: const Color(0xFF23A2D9).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                           child: const Icon(Icons.route_rounded, color: Color(0xFF23A2D9), size: 20),
                         ),
                         title: Text(r.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                        subtitle: Text(
-                          '${r.distance.toStringAsFixed(2)} km • PB $min:${sec.toString().padLeft(2, '0')}',
-                          style: const TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
+                        subtitle: Text('${r.distance.toStringAsFixed(2)} km • PB $min:${sec.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                        onTap: () => context.push('/route-details/${r.id}'),
                         trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
                       ),
                     );
@@ -144,18 +133,13 @@ class StatisticsScreen extends ConsumerWidget {
   }
 }
 
-class _ImpactCardSmall extends StatelessWidget {
+class ImpactCardSmall extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String value;
   final String label;
 
-  const _ImpactCardSmall({
-    required this.icon,
-    required this.color,
-    required this.value,
-    required this.label,
-  });
+  const ImpactCardSmall({super.key, required this.icon, required this.color, required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +148,7 @@ class _ImpactCardSmall extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,31 +163,36 @@ class _ImpactCardSmall extends StatelessWidget {
   }
 }
 
-class _PaceLineChart extends StatelessWidget {
+class PaceLineChart extends StatelessWidget {
   final RouteMaster route;
 
-  const _PaceLineChart({required this.route});
+  const PaceLineChart({super.key, required this.route});
 
   @override
   Widget build(BuildContext context) {
-    // Generate simple pace spots from route points if available
-    // For visualization, we take a subset of points
     List<FlSpot> spots = [];
+
     if (route.points.length > 1) {
       int step = (route.points.length / 10).clamp(1, 1000).toInt();
+      RoutePoint? prevPoint;
+
       for (int i = 0; i < route.points.length; i += step) {
         final p = route.points[i];
-        if (p.timestamp > 0 && p.distance > 0) {
-          // Pace in min/km
-          double pace = (p.timestamp / (p.distance / 1000)) / 60;
-          if (pace < 15 && pace > 2) { // Filter outliers
-            spots.add(FlSpot(p.distance / 1000, pace));
+        if (prevPoint != null) {
+          double deltaDistKm = (p.distance - prevPoint.distance) / 1000;
+          double deltaSec = p.timestamp - prevPoint.timestamp;
+
+          if (deltaDistKm > 0.01 && deltaSec > 0) {
+            double segmentPace = (deltaSec / deltaDistKm) / 60;
+            if (segmentPace < 15 && segmentPace > 2) {
+              spots.add(FlSpot(p.distance / 1000, segmentPace));
+            }
           }
         }
+        prevPoint = p;
       }
     }
 
-    // Fallback spots if no point data is available
     if (spots.isEmpty) {
       spots = [
         const FlSpot(0, 5.0),
@@ -218,24 +207,15 @@ class _PaceLineChart extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          )
-        ],
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: LineChart(
         LineChartData(
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.grey.withValues(alpha: 0.1),
-              strokeWidth: 1,
-            ),
+            getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.1), strokeWidth: 1),
           ),
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(
@@ -273,10 +253,7 @@ class _PaceLineChart extends StatelessWidget {
               belowBarData: BarAreaData(
                 show: true,
                 gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFF23A2D9).withValues(alpha: 0.2),
-                    const Color(0xFF23A2D9).withValues(alpha: 0.0),
-                  ],
+                  colors: [const Color(0xFF23A2D9).withOpacity(0.2), const Color(0xFF23A2D9).withOpacity(0.0)],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -284,34 +261,6 @@ class _PaceLineChart extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ImpactCard extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-
-  const _ImpactCard({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.grey[900],
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Icon(icon, color: color, size: 32),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey)),
       ),
     );
   }

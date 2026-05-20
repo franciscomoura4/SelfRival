@@ -1,10 +1,10 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 
 class RoutePoint {
   final LatLng position;
-  final double timestamp; // Seconds from start
-  final double distance; // Cumulative distance in meters
-  final double altitude; // Altitude in meters
+  final double timestamp;
+  final double distance;
+  final double altitude;
 
   RoutePoint({
     required this.position,
@@ -53,20 +53,17 @@ class RouteMaster {
     required this.points,
   });
 
-  // Helper for map visualization
   List<LatLng> get path => points.map((p) => p.position).toList();
 
   factory RouteMaster.fromJson(Map<dynamic, dynamic> json) {
     var pointsData = json['points'] as List? ?? json['path'] as List? ?? [];
     List<RoutePoint> parsedPoints = [];
-    
-    // Migration/Fallback: If it's the old LatLng list, convert to RoutePoints with dummy data
+
     for (int i = 0; i < pointsData.length; i++) {
       var p = pointsData[i];
       if (p.containsKey('timestamp')) {
         parsedPoints.add(RoutePoint.fromJson(p));
       } else {
-        // Legacy data conversion
         parsedPoints.add(RoutePoint(
           position: LatLng(p['lat'], p['lng']),
           timestamp: 0.0,

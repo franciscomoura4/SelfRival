@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../data/models/route_model.dart';
 
@@ -15,6 +15,7 @@ class TrackingState {
   final Set<int> passedCheckpoints;
   final bool isOffRoute;
   final bool isRouteCompleted;
+  final double? ghostTimeDelta; // NEW: Visual Coach (- is ahead, + is behind)
 
   TrackingState({
     this.trackedPoints = const [],
@@ -26,6 +27,7 @@ class TrackingState {
     this.passedCheckpoints = const {},
     this.isOffRoute = false,
     this.isRouteCompleted = false,
+    this.ghostTimeDelta,
   });
 
   TrackingState copyWith({
@@ -38,6 +40,7 @@ class TrackingState {
     Set<int>? passedCheckpoints,
     bool? isOffRoute,
     bool? isRouteCompleted,
+    double? ghostTimeDelta,
   }) {
     return TrackingState(
       trackedPoints: trackedPoints ?? this.trackedPoints,
@@ -49,6 +52,7 @@ class TrackingState {
       passedCheckpoints: passedCheckpoints ?? this.passedCheckpoints,
       isOffRoute: isOffRoute ?? this.isOffRoute,
       isRouteCompleted: isRouteCompleted ?? this.isRouteCompleted,
+      ghostTimeDelta: ghostTimeDelta ?? this.ghostTimeDelta,
     );
   }
 }
@@ -59,15 +63,19 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   final FlutterTts _tts = FlutterTts();
   RouteMaster? _targetRoute;
   bool _hasStartedMoving = false;
+  double _lastPacingFeedbackDistance = 0;
+  int _lastPaceFeedbackKm = 0;
 
   TrackingNotifier() : super(TrackingState());
 
   Future<void> startTracking({RouteMaster? targetRoute}) async {
     _targetRoute = targetRoute;
     _hasStartedMoving = false;
+    _lastPacingFeedbackDistance = 0;
+    _lastPaceFeedbackKm = 0;
 
     state = TrackingState(isTracking: true);
-    
+
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -93,8 +101,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   void _handlePositionUpdate(Position position) {
     if (!state.isTracking) return;
 
-    // 🟢 IMPROVED START DETECTION: 
-    // Emulators often have 0 speed, so we check distance too.
     bool shouldStart = false;
     if (!_hasStartedMoving) {
       if (position.speed > 0.3) {
@@ -108,7 +114,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
         );
         if (distFromStart > 5) shouldStart = true;
       } else {
-        // First point ever - record it as the potential start
         List<RoutePoint> initialPoints = [RoutePoint(
           position: LatLng(position.latitude, position.longitude),
           timestamp: 0,
@@ -122,13 +127,11 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     if (!_hasStartedMoving && shouldStart) {
       _hasStartedMoving = true;
       _startTimer();
-      _speakFeedback("Run started!");
+      _speakFeedback("Run started! Push your limits.");
     }
 
     if (!_hasStartedMoving) return;
 
-    // Use a local copy of the current state variables to avoid race conditions
-    // during the synchronous execution of this method.
     final currentElapsedTime = state.elapsedTime;
     List<RoutePoint> updatedPoints = List.from(state.trackedPoints);
     double addedDistance = 0.0;
@@ -142,7 +145,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
         position.latitude,
         position.longitude,
       );
-      
+
       if (position.altitude > lastPoint.altitude) {
         addedElevation = position.altitude - lastPoint.altitude;
       }
@@ -157,10 +160,25 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     );
     updatedPoints.add(newPoint);
 
-    // Calculate Pace
+    // Instantaneous pace for better dashboard accuracy
     double currentPace = 0.0;
-    if (currentElapsedTime.inSeconds > 0 && newDistance > 0) {
+    if (addedDistance > 0) {
+      // pace in seconds per km based on the latest movement tick
+      currentPace = (1 / (addedDistance / 1000)); // 1 second per X km
+    } else if (currentElapsedTime.inSeconds > 0 && newDistance > 0) {
       currentPace = (currentElapsedTime.inSeconds / (newDistance / 1000));
+    }
+
+    _checkPaceFeedback(newDistance, currentPace);
+
+    // LIVE COACH DELTA LOGIC
+    double? currentDelta;
+    if (_targetRoute != null && _targetRoute!.points.isNotEmpty && newDistance > 0) {
+      double ghostTime = _getGhostTimeAtDistance(newDistance);
+      if (ghostTime > 0) {
+        currentDelta = currentElapsedTime.inSeconds.toDouble() - ghostTime;
+      }
+      _checkPacingAudioCoach(newDistance, currentDelta);
     }
 
     bool isOffRoute = false;
@@ -179,9 +197,9 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
       if (newCheckpointIndex != null) {
         updatedCheckpoints.add(newCheckpointIndex);
         int totalCheckpoints = 10;
-        if (updatedCheckpoints.length == totalCheckpoints + 1) {
+        if (updatedCheckpoints.length >= totalCheckpoints) {
           isRouteCompleted = true;
-          _speakFeedback("Route completed.");
+          _speakFeedback("Route completed. Outstanding job!");
           _timer?.cancel();
           _positionSubscription?.cancel();
         }
@@ -197,8 +215,51 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
       isOffRoute: isOffRoute,
       isRouteCompleted: isRouteCompleted,
       isTracking: !isRouteCompleted,
-      elapsedTime: currentElapsedTime, // 🟢 Keep current time to prevent overwrite
+      elapsedTime: currentElapsedTime,
+      ghostTimeDelta: currentDelta,
     );
+  }
+
+  void _checkPaceFeedback(double distance, double pace) {
+    int currentKm = (distance / 1000).floor();
+    if (currentKm > _lastPaceFeedbackKm) {
+      _lastPaceFeedbackKm = currentKm;
+      int minutes = (pace / 60).floor();
+      int seconds = (pace % 60).round();
+      _speakFeedback("Kilometer $currentKm. Pace is $minutes minutes and $seconds seconds per kilometer.");
+    }
+  }
+
+  void _checkPacingAudioCoach(double distance, double? delta) {
+    if (delta == null || distance - _lastPacingFeedbackDistance < 500) return;
+    _lastPacingFeedbackDistance = distance;
+
+    if (delta.abs() < 5) {
+      _speakFeedback("You are neck and neck with your personal best.");
+    } else if (delta < 0) {
+      _speakFeedback("You are ${delta.abs().toInt()} seconds ahead of your ghost. Keep it up!");
+    } else {
+      _speakFeedback("You are ${delta.toInt()} seconds behind. Pick up the pace!");
+    }
+  }
+
+  double _getGhostTimeAtDistance(double distance) {
+    final points = _targetRoute!.points;
+    if (points.isEmpty) return 0;
+    if (distance >= points.last.distance) return points.last.timestamp;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      if (distance >= points[i].distance && distance <= points[i+1].distance) {
+        double d1 = points[i].distance;
+        double d2 = points[i+1].distance;
+        double t1 = points[i].timestamp;
+        double t2 = points[i+1].timestamp;
+
+        if (d2 == d1) return t1;
+        return t1 + (t2 - t1) * (distance - d1) / (d2 - d1);
+      }
+    }
+    return 0;
   }
 
   int? _checkCheckpoints(Position current, Set<int> passed) {
@@ -209,17 +270,17 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
       if (passed.contains(i)) continue;
       final p = _targetRoute!.points[i];
       double d = Geolocator.distanceBetween(
-        current.latitude, current.longitude,
-        p.position.latitude, p.position.longitude
+          current.latitude, current.longitude,
+          p.position.latitude, p.position.longitude
       );
-      if (d < 25) return i; 
+      if (d < 25) return i;
     }
     int lastIdx = _targetRoute!.points.length - 1;
     if (!passed.contains(lastIdx)) {
       final lastPoint = _targetRoute!.points[lastIdx];
       double d = Geolocator.distanceBetween(
-        current.latitude, current.longitude,
-        lastPoint.position.latitude, lastPoint.position.longitude
+          current.latitude, current.longitude,
+          lastPoint.position.latitude, lastPoint.position.longitude
       );
       if (d < 30) return lastIdx;
     }
@@ -231,8 +292,8 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     double minDistance = double.infinity;
     for (var p in _targetRoute!.points) {
       double d = Geolocator.distanceBetween(
-        current.latitude, current.longitude,
-        p.position.latitude, p.position.longitude
+          current.latitude, current.longitude,
+          p.position.latitude, p.position.longitude
       );
       if (d < minDistance) minDistance = d;
     }

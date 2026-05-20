@@ -4,7 +4,6 @@ import 'models/route_model.dart';
 import 'models/user_model.dart';
 
 class RestRepository {
-
   static const String baseUrl = 'https://selfrival-59aff-default-rtdb.europe-west1.firebasedatabase.app';
 
   // --- ROUTE METHODS (per-user) ---
@@ -46,12 +45,22 @@ class RestRepository {
     );
   }
 
+  // RESTORED METHOD
+  Future<void> deleteRoute(String uid, String routeId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/users/$uid/routes/$routeId.json'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete route');
+    }
+  }
+
   // --- USER PROFILE ---
   Future<void> saveUserProfile(String uid, String name, String email) async {
     await http.patch(
       Uri.parse('$baseUrl/users/$uid/profile.json'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode(AppUser(id: uid, name: name, email: email).toJson()),
+      body: json.encode({'name': name, 'email': email}),
     );
   }
 }
