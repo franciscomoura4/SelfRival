@@ -24,7 +24,7 @@ class RouteDetailsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator(color: primaryColor)),
         error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.white))),
         data: (routes) {
-          RouteMaster? route;
+          AppRoute? route;
           try {
             route = routes.firstWhere((r) => r.id == routeId);
           } catch (_) {
@@ -32,8 +32,8 @@ class RouteDetailsScreen extends ConsumerWidget {
           }
 
           LatLngBounds? bounds;
-          if (route.points.isNotEmpty) {
-            bounds = LatLngBounds.fromPoints(route.points.map((e) => e.position).toList());
+          if (route.circuit.isNotEmpty) {
+            bounds = LatLngBounds.fromPoints(route.circuit.map((e) => e.position).toList());
           }
 
           return Stack(
@@ -63,8 +63,8 @@ class RouteDetailsScreen extends ConsumerWidget {
                       initialCameraFit: bounds != null
                           ? CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(64))
                           : null,
-                      initialCenter: route.points.isNotEmpty
-                          ? route.points.first.position
+                      initialCenter: route.circuit.isNotEmpty
+                          ? route.circuit.first.position
                           : const LatLng(38.7223, -9.1393),
                       initialZoom: 15.0,
                       interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
@@ -198,8 +198,127 @@ class RouteDetailsScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                         ),
-                        child: PaceLineChart(route: route),
+                        child: PaceLineChart(points: route.circuit, distance: route.distance),
                       ),
+
+                      if (route.activities.isNotEmpty) ...[  
+                        const SizedBox(height: 40),
+                        const Row(
+                          children: [
+                            Icon(Icons.directions_run_rounded, color: Colors.white54, size: 16),
+                            SizedBox(width: 8),
+                            Text(
+                              'ACTIVITIES',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white54,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: route.activities.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final act = route!.activities[index];
+                            final isBest = act.time == route.personalBestTime;
+                            final min = (act.time / 60).floor().toString().padLeft(2, '0');
+                            final sec = (act.time % 60).toInt().toString().padLeft(2, '0');
+                            final dateStr =
+                                '${act.date.day.toString().padLeft(2, '0')}/${act.date.month.toString().padLeft(2, '0')}/${act.date.year}';
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: isBest
+                                    ? primaryColor.withValues(alpha: 0.07)
+                                    : Colors.white.withValues(alpha: 0.03),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isBest
+                                      ? primaryColor.withValues(alpha: 0.3)
+                                      : Colors.white.withValues(alpha: 0.05),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: isBest
+                                          ? primaryColor.withValues(alpha: 0.15)
+                                          : Colors.white.withValues(alpha: 0.05),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      isBest
+                                          ? Icons.emoji_events_rounded
+                                          : Icons.directions_run_rounded,
+                                      color: isBest ? primaryColor : Colors.white38,
+                                      size: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          dateStr,
+                                          style: TextStyle(
+                                            color: isBest ? Colors.white : Colors.white70,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Row(
+                                          children: [
+                                            _ActivityChip(label: '$min:$sec', icon: Icons.timer_outlined),
+                                            const SizedBox(width: 10),
+                                            _ActivityChip(
+                                              label: '${act.distance.toStringAsFixed(2)} km',
+                                              icon: Icons.straighten_rounded,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            _ActivityChip(
+                                              label: '${act.avgSpeed.toStringAsFixed(1)} km/h',
+                                              icon: Icons.speed_rounded,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isBest)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'PB',
+                                        style: TextStyle(
+                                          color: primaryColor,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -415,6 +534,32 @@ class _ActionBtn extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ActivityChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+
+  const _ActivityChip({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 10, color: Colors.white38),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }

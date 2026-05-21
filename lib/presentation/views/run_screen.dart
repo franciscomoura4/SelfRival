@@ -28,7 +28,7 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   int _secondsElapsed = 0;
   Timer? _timer;
 
-  RouteMaster? _targetRoute;
+  AppRoute? _targetRoute;
 
   @override
   void initState() {

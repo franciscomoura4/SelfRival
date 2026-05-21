@@ -26,7 +26,7 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final routes = ref.read(routeProvider).value ?? [];
-      RouteMaster? targetRoute;
+      AppRoute? targetRoute;
       try {
         targetRoute = widget.routeId != null
             ? routes.firstWhere((r) => r.id == widget.routeId)
@@ -73,7 +73,7 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
     final isRacingRoute = widget.routeId != null;
     final routes = ref.watch(routeProvider).value ?? [];
 
-    RouteMaster? targetRoute;
+    AppRoute? targetRoute;
     try {
       targetRoute = isRacingRoute ? routes.firstWhere((r) => r.id == widget.routeId) : null;
     } catch (_) {
@@ -112,7 +112,7 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
                 polylines: [
                   if (targetRoute != null)
                     Polyline(
-                      points: targetRoute.points.map((p) => p.position).toList(),
+                      points: targetRoute.circuit.map((p) => p.position).toList(),
                       color: Colors.white.withValues(alpha: 0.2),
                       strokeWidth: 6.0,
                     ),
@@ -286,7 +286,7 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
 
 class _CockpitHeader extends StatelessWidget {
   final TrackingState state;
-  final RouteMaster? targetRoute;
+  final AppRoute? targetRoute;
   final VoidCallback onClose;
 
   const _CockpitHeader({

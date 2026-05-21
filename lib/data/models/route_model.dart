@@ -36,50 +36,124 @@ class RoutePoint {
   }
 }
 
-class RouteMaster {
+class Activity {
   final String id;
-  final String name;
-  final double distance;
-  final double personalBestTime;
+  final double avgSpeed; // km/h
+  final double distance; // km
+  final double time; // seconds
   final double elevationGain;
+  final DateTime date;
   final List<RoutePoint> points;
 
-  RouteMaster({
+  Activity({
     required this.id,
-    required this.name,
+    required this.avgSpeed,
     required this.distance,
-    required this.personalBestTime,
+    required this.time,
     required this.elevationGain,
+    required this.date,
     required this.points,
   });
 
-  List<LatLng> get path => points.map((p) => p.position).toList();
+  factory Activity.fromJson(Map<dynamic, dynamic> json) {
+    final pointsData = json['points'] as List? ?? [];
+    final parsedPoints = pointsData
+        .map((p) => RoutePoint.fromJson(p as Map<dynamic, dynamic>))
+        .toList();
 
-  factory RouteMaster.fromJson(Map<dynamic, dynamic> json) {
-    var pointsData = json['points'] as List? ?? json['path'] as List? ?? [];
-    List<RoutePoint> parsedPoints = [];
+    return Activity(
+      id: json['id'] as String? ?? '',
+      avgSpeed: (json['avgSpeed'] as num?)?.toDouble() ?? 0.0,
+      distance: (json['distance'] as num?)?.toDouble() ?? 0.0,
+      time: (json['time'] as num?)?.toDouble() ?? 0.0,
+      elevationGain: (json['elevationGain'] as num?)?.toDouble() ?? 0.0,
+      date: json['date'] != null
+          ? DateTime.tryParse(json['date'] as String) ?? DateTime.now()
+          : DateTime.now(),
+      points: parsedPoints,
+    );
+  }
 
-    for (int i = 0; i < pointsData.length; i++) {
-      var p = pointsData[i];
-      if (p.containsKey('timestamp')) {
-        parsedPoints.add(RoutePoint.fromJson(p));
-      } else {
-        parsedPoints.add(RoutePoint(
-          position: LatLng(p['lat'], p['lng']),
-          timestamp: 0.0,
-          distance: 0.0,
-          altitude: 0.0,
-        ));
+  Map<String, dynamic> toJson() {
+    return {
+      'avgSpeed': avgSpeed,
+      'distance': distance,
+      'time': time,
+      'elevationGain': elevationGain,
+      'date': date.toIso8601String(),
+      'points': points.map((p) => p.toJson()).toList(),
+    };
+  }
+}
+
+class AppRoute {
+  final String id;
+  final String name;
+  final List<RoutePoint> circuit; // canonical GPS path of this route
+  final double distance; // km
+  final double elevationGain;
+  final List<Activity> activities; // sorted: most recent first
+
+  AppRoute({
+    required this.id,
+    required this.name,
+    required this.circuit,
+    required this.distance,
+    required this.elevationGain,
+    required this.activities,
+  });
+
+  List<LatLng> get path => circuit.map((p) => p.position).toList();
+
+  double get personalBestTime => activities.isEmpty
+      ? 0.0
+      : activities.map((a) => a.time).reduce((a, b) => a < b ? a : b);
+
+  factory AppRoute.fromJson(Map<dynamic, dynamic> json) {
+    // Support both 'circuit' (new) and 'points' (legacy) keys
+    final circuitData =
+        (json['circuit'] ?? json['points'] ?? json['path']) as List? ?? [];
+    final parsedCircuit = <RoutePoint>[];
+    for (final p in circuitData) {
+      if (p is Map) {
+        final pp = Map<dynamic, dynamic>.from(p);
+        parsedCircuit.add(
+          pp.containsKey('timestamp')
+              ? RoutePoint.fromJson(pp)
+              : RoutePoint(
+                  position: LatLng(
+                    (pp['lat'] as num).toDouble(),
+                    (pp['lng'] as num).toDouble(),
+                  ),
+                  timestamp: 0.0,
+                  distance: 0.0,
+                  altitude: 0.0,
+                ),
+        );
       }
     }
 
-    return RouteMaster(
-      id: json['id'] ?? '',
-      name: json['name'] ?? 'Unnamed Route',
-      distance: (json['distance'] as num).toDouble(),
-      personalBestTime: (json['personalBestTime'] as num).toDouble(),
+    // Parse nested activities map from Firebase
+    final parsedActivities = <Activity>[];
+    final activitiesData = json['activities'];
+    if (activitiesData is Map) {
+      activitiesData.forEach((id, actData) {
+        if (actData is Map) {
+          final actMap = Map<dynamic, dynamic>.from(actData);
+          actMap['id'] = id;
+          parsedActivities.add(Activity.fromJson(actMap));
+        }
+      });
+      parsedActivities.sort((a, b) => b.date.compareTo(a.date));
+    }
+
+    return AppRoute(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Unnamed Route',
+      distance: (json['distance'] as num?)?.toDouble() ?? 0.0,
       elevationGain: (json['elevationGain'] as num?)?.toDouble() ?? 0.0,
-      points: parsedPoints,
+      circuit: parsedCircuit,
+      activities: parsedActivities,
     );
   }
 
@@ -87,9 +161,8 @@ class RouteMaster {
     return {
       'name': name,
       'distance': distance,
-      'personalBestTime': personalBestTime,
       'elevationGain': elevationGain,
-      'points': points.map((p) => p.toJson()).toList(),
+      'circuit': circuit.map((p) => p.toJson()).toList(),
     };
   }
 }

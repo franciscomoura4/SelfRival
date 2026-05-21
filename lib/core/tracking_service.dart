@@ -66,7 +66,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   StreamSubscription<Position>? _positionSubscription;
   Timer? _timer;
   final FlutterTts _tts = FlutterTts();
-  RouteMaster? _targetRoute;
+  AppRoute? _targetRoute;
   bool _hasStartedMoving = false;
   double _lastPacingFeedbackDistance = 0;
   int _lastPaceFeedbackKm = 0;
@@ -112,7 +112,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     }
   }
 
-  Future<void> startTracking({RouteMaster? targetRoute}) async {
+  Future<void> startTracking({AppRoute? targetRoute}) async {
     _targetRoute = targetRoute;
     _hasStartedMoving = false;
     _lastPacingFeedbackDistance = 0;
@@ -214,7 +214,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
 
     // LIVE COACH DELTA LOGIC
     double? currentDelta;
-    if (_targetRoute != null && _targetRoute!.points.isNotEmpty && newDistance > 0) {
+    if (_targetRoute != null && _targetRoute!.circuit.isNotEmpty && newDistance > 0) {
       double ghostTime = _getGhostTimeAtDistance(newDistance);
       if (ghostTime > 0) {
         currentDelta = currentElapsedTime.inSeconds.toDouble() - ghostTime;
@@ -226,7 +226,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     bool isRouteCompleted = state.isRouteCompleted;
     Set<int> updatedCheckpoints = Set.from(state.passedCheckpoints);
 
-    if (_targetRoute != null && _targetRoute!.points.isNotEmpty) {
+    if (_targetRoute != null && _targetRoute!.circuit.isNotEmpty) {
       isOffRoute = _checkOffRoute(position);
       if (isOffRoute && !state.isOffRoute) {
         _speakFeedback("Off route. Head back.");
@@ -240,7 +240,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
         int totalCheckpoints = 10;
         if (updatedCheckpoints.length >= totalCheckpoints) {
           // Verify we are actually at the finish line (within 30m of the last point)
-          final lastPoint = _targetRoute!.points.last;
+          final lastPoint = _targetRoute!.circuit.last;
           double distanceToFinish = Geolocator.distanceBetween(
             position.latitude,
             position.longitude,
@@ -296,7 +296,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   }
 
   double _getGhostTimeAtDistance(double distance) {
-    final points = _targetRoute!.points;
+    final points = _targetRoute!.circuit;
     if (points.isEmpty) return 0;
     if (distance >= points.last.distance) return points.last.timestamp;
 
@@ -317,19 +317,19 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   int? _checkCheckpoints(Position current, Set<int> passed) {
     if (_targetRoute == null) return null;
     int numIntermediates = 10;
-    int step = (_targetRoute!.points.length / numIntermediates).clamp(1, 1000).toInt();
-    for (int i = 0; i < _targetRoute!.points.length - 1; i += step) {
+    int step = (_targetRoute!.circuit.length / numIntermediates).clamp(1, 1000).toInt();
+    for (int i = 0; i < _targetRoute!.circuit.length - 1; i += step) {
       if (passed.contains(i)) continue;
-      final p = _targetRoute!.points[i];
+      final p = _targetRoute!.circuit[i];
       double d = Geolocator.distanceBetween(
           current.latitude, current.longitude,
           p.position.latitude, p.position.longitude
       );
       if (d < 25) return i;
     }
-    int lastIdx = _targetRoute!.points.length - 1;
+    int lastIdx = _targetRoute!.circuit.length - 1;
     if (!passed.contains(lastIdx)) {
-      final lastPoint = _targetRoute!.points[lastIdx];
+      final lastPoint = _targetRoute!.circuit[lastIdx];
       double d = Geolocator.distanceBetween(
           current.latitude, current.longitude,
           lastPoint.position.latitude, lastPoint.position.longitude
@@ -342,7 +342,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   bool _checkOffRoute(Position current) {
     if (_targetRoute == null) return false;
     double minDistance = double.infinity;
-    for (var p in _targetRoute!.points) {
+    for (var p in _targetRoute!.circuit) {
       double d = Geolocator.distanceBetween(
           current.latitude, current.longitude,
           p.position.latitude, p.position.longitude

@@ -27,6 +27,7 @@ class PostRunScreen extends ConsumerStatefulWidget {
 
 class _PostRunScreenState extends ConsumerState<PostRunScreen> {
   final TextEditingController _nameController = TextEditingController();
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -34,15 +35,44 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
     super.dispose();
   }
 
-  void _saveNewCircuit(List<RoutePoint> points) {
-    ref.read(routeProvider.notifier).saveNewRoute(_nameController.text, widget.distance, widget.time.toDouble(), widget.elevation, points);
+  Future<void> _saveFreeRun(List<RoutePoint> points) async {
+    setState(() => _isSaving = true);
+    await ref.read(routeProvider.notifier).saveFreeRun(
+          _nameController.text,
+          widget.distance,
+          widget.time.toDouble(),
+          widget.elevation,
+          points,
+        );
     ref.read(targetRouteIdProvider.notifier).state = null;
-    context.go('/');
+    if (mounted) context.go('/');
   }
 
-  void _updatePB(String routeId) {
-    ref.read(routeProvider.notifier).updatePersonalBest(routeId, widget.time.toDouble());
+  Future<void> _saveGhostRun(
+      String targetRouteId, List<RoutePoint> points) async {
+    setState(() => _isSaving = true);
+    final added = await ref.read(routeProvider.notifier).saveGhostRun(
+          targetRouteId,
+          widget.distance,
+          widget.time.toDouble(),
+          widget.elevation,
+          points,
+        );
     ref.read(targetRouteIdProvider.notifier).state = null;
+    if (!mounted) return;
+    final routes = ref.read(routeProvider).value ?? [];
+    final routeName = added
+        ? routes.firstWhere((r) => r.id == targetRouteId,
+                orElse: () => AppRoute(
+                    id: '', name: 'Route', circuit: [], distance: 0,
+                    elevationGain: 0, activities: []))
+            .name
+        : 'New Circuit';
+    final message = added
+        ? 'Activity added to "$routeName"'
+        : 'Path diverged — saved as "$routeName"';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
     context.go('/');
   }
 
@@ -54,15 +84,10 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
     final targetRouteId = ref.watch(targetRouteIdProvider);
     final routes = ref.watch(routeProvider).value ?? [];
 
-    RouteMaster? targetRoute;
-    bool isNewPB = false;
-    double timeDiff = 0.0;
-
+    AppRoute? targetRoute;
     if (targetRouteId != null) {
       try {
         targetRoute = routes.firstWhere((r) => r.id == targetRouteId);
-        timeDiff = widget.time - targetRoute.personalBestTime;
-        isNewPB = timeDiff < 0;
       } catch (_) {
         targetRoute = null;
       }
@@ -237,7 +262,7 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
                             label: 'SAVE TO CLOUD',
                             color: primaryColor,
                             icon: Icons.cloud_upload_rounded,
-                            onPressed: () => _saveNewCircuit(rawPoints),
+                            onPressed: _isSaving ? () {} : () => _saveFreeRun(rawPoints),
                           ),
                         ] else ...[
                           const Row(
@@ -245,36 +270,25 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
                               Icon(Icons.insights_rounded, color: primaryColor, size: 18),
                               SizedBox(width: 12),
                               Text(
-                                'PERFORMANCE ANALYSIS',
+                                'GHOST RUN COMPLETE',
                                 style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1),
                               ),
                             ],
                           ),
                           const SizedBox(height: 20),
-                          _PerformanceResultCard(
-                            isCompleted: widget.isCompleted,
-                            isNewPB: isNewPB,
-                            timeDiff: timeDiff,
+                          _GhostRunCard(
                             routeName: targetRoute.name,
+                            isCompleted: widget.isCompleted,
                           ),
                           const SizedBox(height: 32),
-                          if (isNewPB && widget.isCompleted)
-                            _ActionBtn(
-                              label: 'UPDATE CLOUD PB',
-                              color: const Color(0xFF4CAF50),
-                              icon: Icons.auto_awesome_rounded,
-                              onPressed: () => _updatePB(targetRoute!.id),
-                            )
-                          else
-                            _ActionBtn(
-                              label: 'FINISH SESSION',
-                              color: Colors.white.withValues(alpha: 0.1),
-                              icon: Icons.check_circle_outline_rounded,
-                              onPressed: () {
-                                ref.read(targetRouteIdProvider.notifier).state = null;
-                                context.go('/');
-                              },
-                            ),
+                          _ActionBtn(
+                            label: _isSaving ? 'SAVING...' : 'SAVE ACTIVITY',
+                            color: primaryColor,
+                            icon: Icons.save_rounded,
+                            onPressed: _isSaving
+                                ? () {}
+                                : () => _saveGhostRun(targetRoute!.id, rawPoints),
+                          ),
                         ],
 
                         const SizedBox(height: 20),
@@ -320,62 +334,67 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
   }
 }
 
-class _PerformanceResultCard extends StatelessWidget {
-  final bool isCompleted;
-  final bool isNewPB;
-  final double timeDiff;
+class _GhostRunCard extends StatelessWidget {
   final String routeName;
+  final bool isCompleted;
 
-  const _PerformanceResultCard({
-    required this.isCompleted,
-    required this.isNewPB,
-    required this.timeDiff,
-    required this.routeName,
-  });
+  const _GhostRunCard({required this.routeName, required this.isCompleted});
 
   @override
   Widget build(BuildContext context) {
-    final Color mainColor = !isCompleted ? Colors.orangeAccent : (isNewPB ? const Color(0xFF00E676) : const Color(0xFFFF1744));
-    
+    final color = isCompleted ? const Color(0xFF23A2D9) : Colors.orangeAccent;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: mainColor.withValues(alpha: 0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: mainColor.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(!isCompleted ? Icons.warning_amber_rounded : (isNewPB ? Icons.emoji_events_rounded : Icons.timer_off_rounded), color: mainColor, size: 28),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      !isCompleted ? 'INCOMPLETE' : (isNewPB ? 'NEW PERSONAL BEST' : 'MISSION SLOWER'),
-                      style: TextStyle(color: mainColor, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1),
-                    ),
-                    Text(
-                      routeName.toUpperCase(),
-                      style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Icon(
+            isCompleted ? Icons.psychology_rounded : Icons.warning_amber_rounded,
+            color: color,
+            size: 28,
           ),
-          const SizedBox(height: 16),
-          Text(
-            !isCompleted
-                ? 'Checkpoints missing. You must cross the official finish line to update your PB history.'
-                : (isNewPB
-                ? 'Shattered! You beat your target by ${timeDiff.abs().toStringAsFixed(1)} seconds. Outstanding intensity.'
-                : 'Behind! You were ${timeDiff.toStringAsFixed(1)} seconds off the target. Maintain focus next session.'),
-            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5, fontWeight: FontWeight.w500),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isCompleted ? 'GHOST RUN COMPLETE' : 'INCOMPLETE RUN',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  routeName.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isCompleted
+                      ? 'Save this activity. Similarity will be checked against the route — if ≥ 70% match, it\'s added to the route; otherwise a new route is created.'
+                      : 'You stopped early. The activity will still be evaluated for route similarity.',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                    height: 1.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

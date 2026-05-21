@@ -107,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     }
   }
 
-  List<Polyline> _buildPolylines(List<RouteMaster> routes) {
+  List<Polyline> _buildPolylines(List<AppRoute> routes) {
     return routes.map((route) {
       final isSelected = route.id == _selectedRouteId;
       return Polyline(
@@ -205,7 +205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                                 const Icon(Icons.stars_rounded, size: 14, color: Color(0xFF23A2D9)),
                                 const SizedBox(width: 8),
                                 Text(
-                                  '${routes.length} SAVED MASTERS',
+                                  '${routes.length} SAVED ROUTES',
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 10,

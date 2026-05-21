@@ -94,6 +94,10 @@ class StatisticsScreen extends ConsumerWidget {
                       }
 
                       final primaryRoute = routes.first;
+                      final bestActivity = primaryRoute.activities.isNotEmpty
+                          ? primaryRoute.activities
+                              .reduce((a, b) => a.time < b.time ? a : b)
+                          : null;
 
                       return SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
@@ -123,7 +127,14 @@ class StatisticsScreen extends ConsumerWidget {
                                         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5),
                                       ),
                                       const SizedBox(height: 20),
-                                      SizedBox(height: 200, child: PaceLineChart(route: primaryRoute, isGlass: true)),
+                                      SizedBox(
+                                        height: 200,
+                                        child: PaceLineChart(
+                                          points: bestActivity?.points ?? primaryRoute.circuit,
+                                          distance: bestActivity?.distance ?? primaryRoute.distance,
+                                          isGlass: true,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -140,7 +151,7 @@ class StatisticsScreen extends ConsumerWidget {
                                   child: _GlassStatCard(
                                     icon: Icons.terrain_rounded,
                                     color: Colors.orangeAccent,
-                                    value: '${primaryRoute.elevationGain.toStringAsFixed(0)}M',
+                                    value: '${(bestActivity?.elevationGain ?? primaryRoute.elevationGain).toStringAsFixed(0)}M',
                                     label: 'ELEVATION',
                                   ),
                                 ),
@@ -149,8 +160,8 @@ class StatisticsScreen extends ConsumerWidget {
                                   child: _GlassStatCard(
                                     icon: Icons.speed_rounded,
                                     color: const Color(0xFF00E676),
-                                    value: (primaryRoute.personalBestTime > 0)
-                                        ? ((primaryRoute.distance / primaryRoute.personalBestTime) * 3.6).toStringAsFixed(1)
+                                    value: bestActivity != null
+                                        ? bestActivity.avgSpeed.toStringAsFixed(1)
                                         : '0.0',
                                     label: 'AVG KM/H',
                                   ),
@@ -287,21 +298,26 @@ class _BlurActionCircle extends StatelessWidget {
 }
 
 class PaceLineChart extends StatelessWidget {
-  final RouteMaster route;
+  final List<RoutePoint> points;
+  final double distance;
   final bool isGlass;
 
-  const PaceLineChart({super.key, required this.route, this.isGlass = false});
+  const PaceLineChart(
+      {super.key,
+      required this.points,
+      required this.distance,
+      this.isGlass = false});
 
   @override
   Widget build(BuildContext context) {
     List<FlSpot> spots = [];
 
-    if (route.points.length > 1) {
-      int step = (route.points.length / 10).clamp(1, 1000).toInt();
+    if (points.length > 1) {
+      int step = (points.length / 10).clamp(1, 1000).toInt();
       RoutePoint? prevPoint;
 
-      for (int i = 0; i < route.points.length; i += step) {
-        final p = route.points[i];
+      for (int i = 0; i < points.length; i += step) {
+        final p = points[i];
         if (prevPoint != null) {
           double deltaDistKm = (p.distance - prevPoint.distance) / 1000;
           double deltaSec = p.timestamp - prevPoint.timestamp;
@@ -318,7 +334,7 @@ class PaceLineChart extends StatelessWidget {
     }
 
     if (spots.isEmpty) {
-      spots = [const FlSpot(0, 5.0), FlSpot(route.distance * 0.5, 5.2), FlSpot(route.distance, 5.1)];
+      spots = [const FlSpot(0, 5.0), FlSpot(distance * 0.5, 5.2), FlSpot(distance, 5.1)];
     }
 
     return LineChart(
