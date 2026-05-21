@@ -218,30 +218,94 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
                           borderRadius: BorderRadius.circular(28),
                           border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                         ),
-                        child: Row(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: _StatView(
-                                label: 'TIME',
-                                value: _formatDuration(trackingState.elapsedTime),
-                                icon: Icons.timer_outlined,
+                            if (trackingState.isAutoPaused)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: Colors.amber.withValues(
+                                            alpha: 0.4)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                          Icons.pause_circle_outline_rounded,
+                                          color: Colors.amber,
+                                          size: 12),
+                                      SizedBox(width: 5),
+                                      Text('AUTO PAUSED',
+                                          style: TextStyle(
+                                              color: Colors.amber,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 1)),
+                                    ],
+                                  ),
+                                ),
                               ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StatView(
+                                    label: 'TIME',
+                                    value: _formatDuration(
+                                        trackingState.elapsedTime),
+                                    icon: Icons.timer_outlined,
+                                  ),
+                                ),
+                                Container(
+                                    width: 1,
+                                    height: 40,
+                                    color: Colors.white.withValues(alpha: 0.1)),
+                                Expanded(
+                                  child: _StatView(
+                                    label: 'DISTANCE',
+                                    value: (trackingState.totalDistance / 1000)
+                                        .toStringAsFixed(2),
+                                    icon: Icons.directions_run_rounded,
+                                  ),
+                                ),
+                                Container(
+                                    width: 1,
+                                    height: 40,
+                                    color: Colors.white.withValues(alpha: 0.1)),
+                                Expanded(
+                                  child: _StatView(
+                                    label: 'PACE',
+                                    value: _formatPace(trackingState.currentPace)
+                                        .split(' ')[0],
+                                    icon: Icons.speed_rounded,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
-                            Expanded(
-                              child: _StatView(
-                                label: 'DISTANCE',
-                                value: (trackingState.totalDistance / 1000).toStringAsFixed(2),
-                                icon: Icons.directions_run_rounded,
-                              ),
-                            ),
-                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
-                            Expanded(
-                              child: _StatView(
-                                label: 'PACE',
-                                value: _formatPace(trackingState.currentPace).split(' ')[0],
-                                icon: Icons.speed_rounded,
-                              ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.directions_walk_rounded,
+                                    size: 11, color: Colors.white38),
+                                const SizedBox(width: 4),
+                                Text(
+                                  trackingState.cadence > 0
+                                      ? '${trackingState.cadence.round()} spm  ·  ${trackingState.stepCount} steps'
+                                      : '--  ·  ${trackingState.stepCount} steps',
+                                  style: const TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.5),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -257,7 +321,7 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
                       final finalState = trackingState;
                       ref.read(trackingProvider.notifier).stopTracking();
                       ref.read(activePathProvider.notifier).state = finalState.trackedPoints;
-                      context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=${finalState.elevationGain}&isCompleted=${finalState.isRouteCompleted}');
+                      context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=${finalState.elevationGain}&isCompleted=${finalState.isRouteCompleted}&stepCount=${finalState.stepCount}');
                     },
                   ),
                 ],

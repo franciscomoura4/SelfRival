@@ -12,6 +12,7 @@ class PostRunScreen extends ConsumerStatefulWidget {
   final int time;
   final double elevation;
   final bool isCompleted;
+  final int stepCount;
 
   const PostRunScreen({
     super.key,
@@ -19,6 +20,7 @@ class PostRunScreen extends ConsumerStatefulWidget {
     this.time = 0,
     this.elevation = 0.0,
     this.isCompleted = false,
+    this.stepCount = 0,
   });
 
   @override
@@ -43,6 +45,7 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
           widget.time.toDouble(),
           widget.elevation,
           points,
+          stepCount: widget.stepCount,
         );
     ref.read(targetRouteIdProvider.notifier).state = null;
     if (mounted) context.go('/');
@@ -57,6 +60,7 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
           widget.time.toDouble(),
           widget.elevation,
           points,
+          stepCount: widget.stepCount,
         );
     ref.read(targetRouteIdProvider.notifier).state = null;
     if (!mounted) return;

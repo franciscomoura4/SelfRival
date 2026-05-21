@@ -60,7 +60,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           final time = int.tryParse(state.uri.queryParameters['time'] ?? '0') ?? 0;
           final elevation = double.tryParse(state.uri.queryParameters['elevation'] ?? '0.0') ?? 0.0;
           final isCompleted = state.uri.queryParameters['isCompleted'] == 'true';
-          return PostRunScreen(distance: distance, time: time, elevation: elevation, isCompleted: isCompleted);
+          final stepCount = int.tryParse(state.uri.queryParameters['stepCount'] ?? '0') ?? 0;
+          return PostRunScreen(distance: distance, time: time, elevation: elevation, isCompleted: isCompleted, stepCount: stepCount);
         },
       ),
       GoRoute(

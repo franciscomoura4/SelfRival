@@ -31,11 +31,12 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
   /// recorded GPS trace, then adds the first activity to it.
   Future<void> saveFreeRun(
     String name,
-    double distance, // km
+    double distance,
     double timeInSeconds,
     double elevation,
-    List<RoutePoint> points,
-  ) async {
+    List<RoutePoint> points, {
+    int stepCount = 0,
+  }) async {
     if (_uid.isEmpty) return;
     try {
       final newRoute = AppRoute(
@@ -58,6 +59,7 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
         elevationGain: elevation,
         date: DateTime.now(),
         points: points,
+        stepCount: stepCount,
       );
       final savedActivity =
           await _repository.addActivity(_uid, savedRoute.id, activity);
@@ -85,11 +87,12 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
   /// (similarity ≥ 70%), or `false` if a new route was created.
   Future<bool> saveGhostRun(
     String targetRouteId,
-    double distance, // km
+    double distance,
     double timeInSeconds,
     double elevation,
-    List<RoutePoint> points,
-  ) async {
+    List<RoutePoint> points, {
+    int stepCount = 0,
+  }) async {
     if (_uid.isEmpty) return false;
     try {
       final routes = state.value ?? [];
@@ -108,6 +111,7 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
         elevationGain: elevation,
         date: DateTime.now(),
         points: points,
+        stepCount: stepCount,
       );
 
       final similar =

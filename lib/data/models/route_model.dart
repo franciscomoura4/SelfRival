@@ -44,6 +44,7 @@ class Activity {
   final double elevationGain;
   final DateTime date;
   final List<RoutePoint> points;
+  final int stepCount;
 
   Activity({
     required this.id,
@@ -53,6 +54,7 @@ class Activity {
     required this.elevationGain,
     required this.date,
     required this.points,
+    this.stepCount = 0,
   });
 
   factory Activity.fromJson(Map<dynamic, dynamic> json) {
@@ -71,6 +73,7 @@ class Activity {
           ? DateTime.tryParse(json['date'] as String) ?? DateTime.now()
           : DateTime.now(),
       points: parsedPoints,
+      stepCount: (json['stepCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -82,6 +85,7 @@ class Activity {
       'elevationGain': elevationGain,
       'date': date.toIso8601String(),
       'points': points.map((p) => p.toJson()).toList(),
+      'stepCount': stepCount,
     };
   }
 }

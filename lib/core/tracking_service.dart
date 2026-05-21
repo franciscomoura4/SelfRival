@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -17,7 +19,10 @@ class TrackingState {
   final bool isOffRoute;
   final bool isRouteCompleted;
   final double? ghostTimeDelta; // NEW: Visual Coach (- is ahead, + is behind)
-  final String? coachMessage; // NEW: Textual feedback for the UI
+  final String? coachMessage;
+  final int stepCount;
+  final double cadence; // steps per minute
+  final bool isAutoPaused;
 
   TrackingState({
     this.trackedPoints = const [],
@@ -31,6 +36,9 @@ class TrackingState {
     this.isRouteCompleted = false,
     this.ghostTimeDelta,
     this.coachMessage,
+    this.stepCount = 0,
+    this.cadence = 0.0,
+    this.isAutoPaused = false,
   });
 
   TrackingState copyWith({
@@ -45,6 +53,9 @@ class TrackingState {
     bool? isRouteCompleted,
     double? ghostTimeDelta,
     String? coachMessage,
+    int? stepCount,
+    double? cadence,
+    bool? isAutoPaused,
   }) {
     return TrackingState(
       trackedPoints: trackedPoints ?? this.trackedPoints,
@@ -58,12 +69,16 @@ class TrackingState {
       isRouteCompleted: isRouteCompleted ?? this.isRouteCompleted,
       ghostTimeDelta: ghostTimeDelta ?? this.ghostTimeDelta,
       coachMessage: coachMessage ?? this.coachMessage,
+      stepCount: stepCount ?? this.stepCount,
+      cadence: cadence ?? this.cadence,
+      isAutoPaused: isAutoPaused ?? this.isAutoPaused,
     );
   }
 }
 
 class TrackingNotifier extends StateNotifier<TrackingState> {
   StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription? _accelSubscription;
   Timer? _timer;
   final FlutterTts _tts = FlutterTts();
   AppRoute? _targetRoute;
@@ -71,6 +86,15 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   double _lastPacingFeedbackDistance = 0;
   int _lastPaceFeedbackKm = 0;
   final List<double> _recentSpeeds = [];
+
+  // Cadence & auto-pause
+  int _stepCount = 0;
+  bool _stepPeak = false;
+  final List<DateTime> _stepTimestamps = [];
+  bool _hadMovementThisSecond = false;
+  int _consecutiveStillSeconds = 0;
+  static const double _stepThreshold = 12.5;
+  static const double _movementDelta = 1.5; // net m/s² above gravity
 
   TrackingNotifier() : super(TrackingState()) {
     _initTts();
@@ -118,9 +142,15 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     _lastPacingFeedbackDistance = 0;
     _lastPaceFeedbackKm = 0;
     _recentSpeeds.clear();
+    _stepCount = 0;
+    _stepTimestamps.clear();
+    _stepPeak = false;
+    _hadMovementThisSecond = false;
+    _consecutiveStillSeconds = 0;
 
     state = TrackingState(isTracking: true);
     _startTimer();
+    _startAccelerometer();
     _speakFeedback("Run started! Push your limits.");
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -139,17 +169,78 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   void _startTimer() {
     if (_timer != null) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (state.isTracking) {
-        state = state.copyWith(elapsedTime: state.elapsedTime + const Duration(seconds: 1));
+      if (!state.isTracking) return;
+
+      // Auto-pause detection
+      if (_hadMovementThisSecond) {
+        _consecutiveStillSeconds = 0;
+        if (state.isAutoPaused) {
+          state = state.copyWith(isAutoPaused: false);
+        }
+      } else {
+        _consecutiveStillSeconds++;
       }
+      _hadMovementThisSecond = false;
+
+      if (_consecutiveStillSeconds >= 3 && !state.isAutoPaused) {
+        state = state.copyWith(isAutoPaused: true, stepCount: _stepCount);
+        return;
+      }
+      if (state.isAutoPaused) {
+        state = state.copyWith(stepCount: _stepCount);
+        return;
+      }
+
+      // Cadence: steps in the last 30 s
+      final now = DateTime.now();
+      final cutoff = now.subtract(const Duration(seconds: 30));
+      _stepTimestamps.removeWhere((t) => t.isBefore(cutoff));
+      double cadence = 0;
+      if (_stepTimestamps.length >= 2) {
+        final windowSeconds =
+            now.difference(_stepTimestamps.first).inMilliseconds / 1000.0;
+        if (windowSeconds > 0) {
+          cadence = (_stepTimestamps.length / windowSeconds) * 60;
+        }
+      }
+
+      state = state.copyWith(
+        elapsedTime: state.elapsedTime + const Duration(seconds: 1),
+        stepCount: _stepCount,
+        cadence: cadence,
+      );
     });
+  }
+
+  void _startAccelerometer() {
+    _accelSubscription?.cancel();
+    _accelSubscription = accelerometerEventStream(
+      samplingPeriod: SensorInterval.normalInterval,
+    ).listen((event) {
+      final mag =
+          sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+
+      // Step detection: upward peak crossing
+      if (!_stepPeak && mag > _stepThreshold) {
+        _stepPeak = true;
+        _stepCount++;
+        _stepTimestamps.add(DateTime.now());
+      } else if (_stepPeak && mag < _stepThreshold - 1.5) {
+        _stepPeak = false;
+      }
+
+      // Movement flag for auto-pause
+      if ((mag - 9.81).abs() > _movementDelta) {
+        _hadMovementThisSecond = true;
+      }
+    }, onError: (_) {});
   }
 
   void _handlePositionUpdate(Position position) {
     if (!state.isTracking) return;
+    if (state.isAutoPaused && _hasStartedMoving) return;
 
     if (!_hasStartedMoving) {
-      _hasStartedMoving = true;
       List<RoutePoint> initialPoints = [
         RoutePoint(
           position: LatLng(position.latitude, position.longitude),
@@ -363,9 +454,10 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
 
   void stopTracking() {
     _positionSubscription?.cancel();
+    _accelSubscription?.cancel();
     _timer?.cancel();
     _timer = null;
-    state = state.copyWith(isTracking: false);
+    state = state.copyWith(isTracking: false, isAutoPaused: false);
   }
 
   @override
