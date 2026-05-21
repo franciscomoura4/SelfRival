@@ -76,6 +76,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+    
     try {
       final auth = ref.read(authProvider.notifier);
       if (_isSignIn) {
@@ -87,11 +88,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
           _nameController.text.trim(),
         );
       }
-    } on FirebaseAuthException catch (e) {
+      // Flutter will handle the auth state change automatically.
+    } catch (e) {
+      // This catches the 'Exception' thrown by AuthViewModel
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_friendlyError(e)),
+            content: Text(e.toString().replaceAll('Exception: ', '')),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
           ),
