@@ -222,29 +222,32 @@ class RouteDetailsScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _ActionBtn(
-                          label: 'RACE GHOST',
-                          color: Colors.white.withValues(alpha: 0.1),
-                          textColor: Colors.white,
-                          icon: Icons.psychology_rounded,
-                          onPressed: () => context.push('/run?routeId=$routeId'),
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 40),
+                  child: SafeArea(
+                    top: false,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _ActionBtn(
+                            label: 'RACE GHOST',
+                            color: Colors.white.withValues(alpha: 0.1),
+                            textColor: Colors.white,
+                            icon: Icons.psychology_rounded,
+                            onPressed: () => context.push('/run?routeId=$routeId'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _ActionBtn(
-                          label: 'START RUN',
-                          color: primaryColor,
-                          textColor: Colors.white,
-                          icon: Icons.play_arrow_rounded,
-                          onPressed: () => context.push('/run'),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _ActionBtn(
+                            label: 'START RUN',
+                            color: primaryColor,
+                            textColor: Colors.white,
+                            icon: Icons.play_arrow_rounded,
+                            onPressed: () => context.push('/run'),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -385,22 +388,29 @@ class _ActionBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 56,
+      width: double.infinity,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: textColor,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
         onPressed: onPressed,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
           ],
         ),
