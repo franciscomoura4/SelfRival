@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,8 +17,9 @@ class ActiveRunScreen extends ConsumerStatefulWidget {
   ConsumerState<ActiveRunScreen> createState() => _ActiveRunScreenState();
 }
 
-class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> {
+class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
+  bool _isFollowing = true;
 
   @override
   void initState() {
@@ -41,6 +43,30 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> {
     });
   }
 
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    final latTween = Tween<double>(begin: _mapController.camera.center.latitude, end: destLocation.latitude);
+    final lngTween = Tween<double>(begin: _mapController.camera.center.longitude, end: destLocation.longitude);
+    final zoomTween = Tween<double>(begin: _mapController.camera.zoom, end: destZoom);
+
+    final controller = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    final Animation<double> animation = CurvedAnimation(parent: controller, curve: Curves.fastOutSlowIn);
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
     final trackingState = ref.watch(trackingProvider);
@@ -54,195 +80,191 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> {
       targetRoute = null;
     }
 
-    if (trackingState.trackedPoints.isNotEmpty) {
-      _mapController.move(trackingState.trackedPoints.last.position, 17.0);
-    }
+    ref.listen(trackingProvider, (previous, next) {
+      if (_isFollowing && next.trackedPoints.isNotEmpty) {
+        final double targetZoom = (previous?.trackedPoints.isEmpty ?? true) ? 17.0 : _mapController.camera.zoom;
+        _animatedMapMove(next.trackedPoints.last.position, targetZoom);
+      }
+    });
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              flex: 5,
-              child: Stack(
-                children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: const MapOptions(
-                      initialCenter: LatLng(38.7223, -9.1393),
-                      initialZoom: 15.0,
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Full Screen Map Background
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(38.7223, -9.1393),
+              initialZoom: 15.0,
+              onPositionChanged: (position, hasGesture) {
+                if (hasGesture) {
+                  setState(() => _isFollowing = false);
+                }
+              },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.selfrival',
+              ),
+              PolylineLayer(
+                polylines: [
+                  if (targetRoute != null)
+                    Polyline(
+                      points: targetRoute.points.map((p) => p.position).toList(),
+                      color: Colors.white.withValues(alpha: 0.2),
+                      strokeWidth: 6.0,
                     ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.selfrival',
-                      ),
-                      PolylineLayer(
-                        polylines: [
-                          if (targetRoute != null)
-                            Polyline(
-                              points: targetRoute.points.map((p) => p.position).toList(),
-                              color: Colors.grey.withOpacity(0.5),
-                              strokeWidth: 6.0,
-                            ),
-                          if (trackingState.trackedPoints.isNotEmpty)
-                            Polyline(
-                              points: trackingState.trackedPoints.map((p) => p.position).toList(),
-                              color: const Color(0xFF23A2D9),
-                              strokeWidth: 5.0,
-                            ),
-                        ],
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          if (trackingState.trackedPoints.isNotEmpty)
-                            Marker(
-                              point: trackingState.trackedPoints.last.position,
-                              width: 20,
-                              height: 20,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.blueAccent,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 3),
-                                  boxShadow: const [BoxShadow(color: Colors.blue, blurRadius: 10)],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: FloatingActionButton.small(
-                      backgroundColor: Colors.white,
-                      onPressed: () {
-                        ref.read(trackingProvider.notifier).stopTracking();
-                        context.pop();
-                      },
-                      child: const Icon(Icons.arrow_back, color: Colors.black),
+                  if (trackingState.trackedPoints.isNotEmpty)
+                    Polyline(
+                      points: trackingState.trackedPoints.map((p) => p.position).toList(),
+                      color: const Color(0xFF23A2D9),
+                      strokeWidth: 5.0,
                     ),
-                  ),
-                  if (isRacingRoute)
-                    Positioned(
-                      top: 16,
-                      right: 16,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(20)),
-                            child: const Text('RACING GHOST', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
-                          if (trackingState.ghostTimeDelta != null)
-                            Container(
-                              margin: const EdgeInsets.only(top: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: trackingState.ghostTimeDelta! <= 0 ? Colors.green : Colors.redAccent,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                trackingState.ghostTimeDelta! <= 0
-                                    ? 'AHEAD ${trackingState.ghostTimeDelta!.abs().toInt()}s'
-                                    : 'BEHIND ${trackingState.ghostTimeDelta!.abs().toInt()}s',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
-                              ),
-                            ),
-                          if (trackingState.isOffRoute)
-                            Container(
-                              margin: const EdgeInsets.only(top: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.warning, color: Colors.white, size: 16),
-                                  SizedBox(width: 4),
-                                  Text('OFF ROUTE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                        ],
+                ],
+              ),
+              MarkerLayer(
+                markers: [
+                  if (trackingState.trackedPoints.isNotEmpty)
+                    Marker(
+                      point: trackingState.trackedPoints.last.position,
+                      width: 24,
+                      height: 24,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF23A2D9),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF23A2D9).withValues(alpha: 0.5),
+                              blurRadius: 15,
+                              spreadRadius: 2,
+                            )
+                          ],
+                        ),
                       ),
                     ),
                 ],
               ),
-            ),
-            Expanded(
-              flex: 4,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -10))],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(child: _StatView(label: 'TIME', value: _formatDuration(trackingState.elapsedTime))),
-                          Expanded(child: _StatView(label: 'DISTANCE', value: (trackingState.totalDistance / 1000).toStringAsFixed(2))),
-                          Expanded(child: _StatView(label: 'PACE', value: _formatPace(trackingState.currentPace).split(' ')[0])),
-                        ],
-                      ),
-                    ),
-                    Center(
-                      child: SizedBox(
-                        height: 80, width: 80,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            foregroundColor: Colors.white,
-                            shape: const CircleBorder(),
-                            elevation: 10,
-                            shadowColor: Colors.redAccent.withOpacity(0.5),
-                            padding: EdgeInsets.zero,
-                          ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).clearSnackBars();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Long press (hold) the button to stop the run!'),
-                                duration: Duration(seconds: 2),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                          onLongPress: () {
-                            final finalState = trackingState;
-                            ref.read(trackingProvider.notifier).stopTracking();
-                            ref.read(activePathProvider.notifier).state = finalState.trackedPoints;
-                            context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=${finalState.elevationGain}&isCompleted=${finalState.isRouteCompleted}');
-                          },
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.stop_rounded, size: 32),
-                              Text('HOLD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  ],
-                ),
+            ],
+          ),
+
+          // Top Header Overlay
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: _CockpitHeader(
+                state: trackingState,
+                targetRoute: targetRoute,
+                onClose: () {
+                  ref.read(trackingProvider.notifier).stopTracking();
+                  context.pop();
+                },
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Bottom Stats and Controls Overlay
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.9),
+                    Colors.black.withValues(alpha: 0.7),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.6, 1.0],
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 40, 20, 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Location Button Floating above Stats
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _BlurActionCircle(
+                        icon: Icons.my_location_rounded,
+                        color: _isFollowing ? const Color(0xFF23A2D9) : Colors.white,
+                        onPressed: () {
+                          setState(() => _isFollowing = true);
+                          if (trackingState.trackedPoints.isNotEmpty) {
+                            _animatedMapMove(trackingState.trackedPoints.last.position, 18.0);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // Glass Stat Panel
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _StatView(
+                                label: 'TIME',
+                                value: _formatDuration(trackingState.elapsedTime),
+                                icon: Icons.timer_outlined,
+                              ),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
+                            Expanded(
+                              child: _StatView(
+                                label: 'DISTANCE',
+                                value: (trackingState.totalDistance / 1000).toStringAsFixed(2),
+                                icon: Icons.directions_run_rounded,
+                              ),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
+                            Expanded(
+                              child: _StatView(
+                                label: 'PACE',
+                                value: _formatPace(trackingState.currentPace).split(' ')[0],
+                                icon: Icons.speed_rounded,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Stop Button
+                  _StopButton(
+                    onLongPress: () {
+                      final finalState = trackingState;
+                      ref.read(trackingProvider.notifier).stopTracking();
+                      ref.read(activePathProvider.notifier).state = finalState.trackedPoints;
+                      context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=${finalState.elevationGain}&isCompleted=${finalState.isRouteCompleted}');
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -262,20 +284,260 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> {
   }
 }
 
+class _CockpitHeader extends StatelessWidget {
+  final TrackingState state;
+  final RouteMaster? targetRoute;
+  final VoidCallback onClose;
+
+  const _CockpitHeader({
+    required this.state,
+    required this.targetRoute,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isAhead = (state.ghostTimeDelta ?? 0) <= 0;
+    final isOffRoute = state.isOffRoute;
+    final isRacing = targetRoute != null;
+
+    final Color statusColor = isOffRoute
+        ? Colors.orangeAccent
+        : (isAhead ? const Color(0xFF00E676) : const Color(0xFFFF1744));
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                // Close Button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onClose,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
+                    ),
+                  ),
+                ),
+                
+                // Vertical Divider
+                Container(width: 1, color: Colors.white.withValues(alpha: 0.1)),
+                
+                // Main Content Area
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              (isRacing ? targetRoute!.name : "FREE RUN").toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            if (isRacing) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  isOffRoute ? "OFF ROUTE" : (isAhead ? "AHEAD" : "BEHIND"),
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (isRacing)
+                              Text(
+                                state.ghostTimeDelta != null
+                                    ? "${state.ghostTimeDelta!.abs().toStringAsFixed(1)}s"
+                                    : "--",
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -1,
+                                ),
+                              ),
+                            if (!isRacing)
+                              const Text(
+                                "RECORDING",
+                                style: TextStyle(
+                                  color: Color(0xFF23A2D9),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            if (state.coachMessage != null)
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Text(
+                                    state.coachMessage!.toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.5),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatView extends StatelessWidget {
   final String label;
   final String value;
-  const _StatView({required this.label, required this.value});
+  final IconData icon;
+
+  const _StatView({required this.label, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1, color: Theme.of(context).colorScheme.onSurface)),
+        Icon(icon, color: Colors.white.withValues(alpha: 0.4), size: 16),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.5,
+            color: Colors.white,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.4),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _BlurActionCircle extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color color;
+
+  const _BlurActionCircle({
+    required this.icon,
+    required this.onPressed,
+    this.color = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.3),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: IconButton(
+            icon: Icon(icon, color: color, size: 24),
+            onPressed: onPressed,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StopButton extends StatelessWidget {
+  final VoidCallback onLongPress;
+
+  const _StopButton({required this.onLongPress});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPress: onLongPress,
+      onTap: () {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Hold to finish your session'),
+            backgroundColor: Colors.redAccent.withValues(alpha: 0.9),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      child: Container(
+        height: 72,
+        width: 72,
+        decoration: BoxDecoration(
+          color: Colors.redAccent,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.redAccent.withValues(alpha: 0.4),
+              blurRadius: 20,
+              spreadRadius: 4,
+            )
+          ],
+        ),
+        child: const Icon(Icons.stop_rounded, color: Colors.white, size: 36),
+      ),
     );
   }
 }
