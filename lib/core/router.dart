@@ -8,31 +8,28 @@ import '../presentation/views/post_run_screen.dart';
 import '../presentation/views/statistics_screen.dart';
 import '../presentation/views/login_screen.dart';
 import '../presentation/views/profile_screen.dart';
+import '../presentation/views/route_details_screen.dart';
 
 // ViewModels
 import '../presentation/viewmodels/auth_viewmodel.dart';
 
-// Wrap GoRouter in a provider so it can read the Auth State dynamically
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
 
   return GoRouter(
-    initialLocation: '/login', // Always evaluate from the login page first
-
-    // REDIRECT LOGIC: This runs on every screen change and state change
+    initialLocation: '/login',
     redirect: (context, state) {
       final isLoggedIn = authState != null;
       final isGoingToLogin = state.uri.toString() == '/login';
 
       if (!isLoggedIn && !isGoingToLogin) {
-        return '/login'; // Force them to login
+        return '/login';
       }
       if (isLoggedIn && isGoingToLogin) {
-        return '/'; // Already logged in? Send to Home dashboard
+        return '/';
       }
-      return null; // No redirect needed, let them go to their destination
+      return null;
     },
-
     routes: [
       GoRoute(
           path: '/login',
@@ -43,9 +40,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           builder: (context, state) => const HomeScreen()
       ),
       GoRoute(
+        path: '/route-details/:routeId',
+        builder: (context, state) {
+          final routeId = state.pathParameters['routeId']!;
+          return RouteDetailsScreen(routeId: routeId);
+        },
+      ),
+      GoRoute(
         path: '/run',
         builder: (context, state) {
-          // Extracts the routeId if we are racing a specific route
           final routeId = state.uri.queryParameters['routeId'];
           return ActiveRunScreen(routeId: routeId);
         },

@@ -17,28 +17,29 @@ dependencies:
   # Navigation
   go_router: ^13.2.0
   
-  # UI & Visualization (Lab Requirement)
+  # UI & Visualization
   fl_chart: ^0.66.0
-  
-  # Device Capabilities (Lab Requirement)
+
+  # Device Capabilities
   geolocator: ^12.0.0
   sensors_plus: ^5.0.1
-  
-  # Maps
-  google_maps_flutter: ^2.5.3
-  
-  # REST API (Lab Requirement)
+
+  # Lightweight Maps (Replaces google_maps_flutter)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # REST API
   http: ^1.2.0
 
   # Audio Feedback
   flutter_tts: ^4.0.2
-  
-  # Firebase (For later)
+
+  # Firebase
   firebase_core: ^2.25.4
   firebase_auth: ^4.17.4
   cloud_firestore: ^4.15.8
   shared_preferences: ^2.5.5
-  
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

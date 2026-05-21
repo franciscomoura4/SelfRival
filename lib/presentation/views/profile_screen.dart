@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,14 +13,12 @@ class ProfileScreen extends ConsumerWidget {
     final user = ref.watch(authProvider);
     final routesState = ref.watch(routeProvider);
     final routes = routesState.value ?? [];
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = Theme.of(context).colorScheme;
+    const primaryColor = Color(0xFF23A2D9);
 
     final initial = user?.name.isNotEmpty == true
         ? user!.name.substring(0, 1).toUpperCase()
         : 'U';
 
-    // Stats derived from routes
     final totalRoutes = routes.length;
     final totalDistance = routes.fold(0.0, (sum, r) => sum + r.distance);
     final bestPace = routes.isEmpty
@@ -32,122 +31,204 @@ class ProfileScreen extends ConsumerWidget {
             });
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-
-            // --- Avatar ---
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: colors.primary,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.primary.withValues(alpha: 0.35),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                  ),
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Immersive Background
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0D1B2A), Colors.black, Colors.black],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+          ),
 
-            // --- Name & Email ---
-            Text(
-              user?.name ?? 'Runner',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              user?.email ?? '',
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark ? Colors.white54 : Colors.black45,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // --- Stats row ---
-            _StatsRow(
-              totalRoutes: totalRoutes,
-              totalDistance: totalDistance,
-              bestPace: bestPace,
-              isDark: isDark,
-              colors: colors,
-            ),
-            const SizedBox(height: 32),
-
-            // --- Sign Out ---
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text(
-                  'Sign Out',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: colors.error,
-                  side: BorderSide(color: colors.error.withValues(alpha: 0.5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                onPressed: () async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Sign out?'),
-                      content: const Text('You will be returned to the login screen.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Theme.of(ctx).colorScheme.error,
+          SafeArea(
+            child: Column(
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'USER COCKPIT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
                           ),
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Sign Out'),
+                          Text(
+                            'IDENTITY VERIFIED',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _BlurActionCircle(
+                        icon: Icons.arrow_back_rounded,
+                        onPressed: () => context.pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+
+                        // --- Avatar Cockpit ---
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: primaryColor.withValues(alpha: 0.2), width: 8),
+                              ),
+                            ),
+                            Container(
+                              width: 96,
+                              height: 96,
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: primaryColor.withValues(alpha: 0.4),
+                                    blurRadius: 30,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  initial,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 40,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        Text(
+                          (user?.name ?? 'ATHLETE').toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          user?.email.toUpperCase() ?? '',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white38,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 40),
+
+                        // --- Stats Island (Glass) ---
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                              ),
+                              child: Row(
+                                children: [
+                                  _ProfileStat(label: 'ROUTES', value: '$totalRoutes', icon: Icons.route_rounded),
+                                  Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
+                                  _ProfileStat(label: 'TOTAL KM', value: totalDistance.toStringAsFixed(1), icon: Icons.straighten_rounded),
+                                  Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
+                                  _ProfileStat(
+                                    label: 'BEST PACE', 
+                                    value: bestPace == null ? '--' : '${bestPace.floor()}:${((bestPace % 1) * 60).round().toString().padLeft(2, '0')}',
+                                    icon: Icons.speed_rounded
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 48),
+
+                        // --- Action List ---
+                        _ProfileMenuTile(
+                          icon: Icons.logout_rounded,
+                          label: 'DEACTIVATE SESSION',
+                          color: Colors.redAccent,
+                          onPressed: () => _confirmSignOut(context, ref),
                         ),
                       ],
                     ),
-                  );
-                  if (confirmed == true) {
-                    await ref.read(authProvider.notifier).logout();
-                  }
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 32),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmSignOut(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('END SESSION?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1)),
+          content: const Text('You will be returned to the athlete recruitment screen.', style: TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('CANCEL', style: TextStyle(color: Colors.white38, fontWeight: FontWeight.w800)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ref.read(authProvider.notifier).logout();
+              },
+              child: const Text('SIGN OUT', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900)),
+            ),
           ],
         ),
       ),
@@ -155,106 +236,100 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _StatsRow extends StatelessWidget {
-  final int totalRoutes;
-  final double totalDistance;
-  final double? bestPace;
-  final bool isDark;
-  final ColorScheme colors;
-
-  const _StatsRow({
-    required this.totalRoutes,
-    required this.totalDistance,
-    required this.bestPace,
-    required this.isDark,
-    required this.colors,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bestPaceLabel = bestPace == null
-        ? '—'
-        : '${bestPace!.floor()}:${((bestPace! % 1) * 60).round().toString().padLeft(2, '0')}';
-
-    return Row(
-      children: [
-        _StatCard(
-          value: '$totalRoutes',
-          label: 'Routes',
-          icon: Icons.route_rounded,
-          isDark: isDark,
-          colors: colors,
-        ),
-        const SizedBox(width: 12),
-        _StatCard(
-          value: '${totalDistance.toStringAsFixed(1)} km',
-          label: 'Total Distance',
-          icon: Icons.straighten_rounded,
-          isDark: isDark,
-          colors: colors,
-        ),
-        const SizedBox(width: 12),
-        _StatCard(
-          value: bestPaceLabel,
-          label: 'Best Pace /km',
-          icon: Icons.speed_rounded,
-          isDark: isDark,
-          colors: colors,
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String value;
+class _ProfileStat extends StatelessWidget {
   final String label;
+  final String value;
   final IconData icon;
-  final bool isDark;
-  final ColorScheme colors;
 
-  const _StatCard({
-    required this.value,
-    required this.label,
-    required this.icon,
-    required this.isDark,
-    required this.colors,
-  });
+  const _ProfileStat({required this.label, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.grey.shade200,
+      child: Column(
+        children: [
+          Icon(icon, size: 14, color: Colors.white38),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileMenuTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  const _ProfileMenuTile({required this.icon, required this.label, required this.color, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 16),
+                Text(
+                  label,
+                  style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1),
+                ),
+                const Spacer(),
+                Icon(Icons.chevron_right_rounded, color: color.withValues(alpha: 0.3)),
+              ],
+            ),
           ),
         ),
-        child: Column(
-          children: [
-            Icon(icon, size: 20, color: colors.primary),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                color: isDark ? Colors.white38 : Colors.black38,
-              ),
-            ),
-          ],
+      ),
+    );
+  }
+}
+
+class _BlurActionCircle extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _BlurActionCircle({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: IconButton(
+            icon: Icon(icon, color: Colors.white, size: 20),
+            onPressed: onPressed,
+          ),
         ),
       ),
     );
