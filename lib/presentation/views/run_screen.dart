@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../viewmodels/route_viewmodel.dart';
 import '../../data/models/route_model.dart';
 
 class RunScreen extends ConsumerStatefulWidget {
-  final String? routeId; // If this is passed, we are racing a PB!
+  final String? routeId;
   const RunScreen({super.key, this.routeId});
 
   @override
@@ -16,12 +18,12 @@ class RunScreen extends ConsumerStatefulWidget {
 }
 
 class _RunScreenState extends ConsumerState<RunScreen> {
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionStream;
 
   final List<LatLng> _currentPath = [];
   double _totalDistanceKm = 0.0;
-  double _elevationGain = 0.0; //ALTTITUDE TRACKER
+  double _elevationGain = 0.0;
   double? _lastAltitude;
   int _secondsElapsed = 0;
   Timer? _timer;
@@ -31,7 +33,6 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   @override
   void initState() {
     super.initState();
-    //app know if we are racing a ghost!
     Future.microtask(() {
       ref.read(targetRouteIdProvider.notifier).state = widget.routeId;
       if (widget.routeId != null) {
@@ -44,7 +45,7 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
   void _startRun() async {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() => _secondsElapsed++);
+      if (mounted) setState(() => _secondsElapsed++);
     });
 
     _positionStream = Geolocator.getPositionStream(
@@ -52,29 +53,33 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     ).listen((Position position) {
       final newPoint = LatLng(position.latitude, position.longitude);
 
-      setState(() {
-        if (_currentPath.isNotEmpty) {
-          // Distance calc
-          final lastPoint = _currentPath.last;
-          _totalDistanceKm += (Geolocator.distanceBetween(lastPoint.latitude, lastPoint.longitude, newPoint.latitude, newPoint.longitude) / 1000);
-
-          // Elevation calc (only add positive gains like Strava)
-          if (_lastAltitude != null && position.altitude > _lastAltitude!) {
-            _elevationGain += (position.altitude - _lastAltitude!);
+      if (mounted) {
+        setState(() {
+          if (_currentPath.isNotEmpty) {
+            final lastPoint = _currentPath.last;
+            _totalDistanceKm += (Geolocator.distanceBetween(lastPoint.latitude, lastPoint.longitude, newPoint.latitude, newPoint.longitude) / 1000);
+            if (_lastAltitude != null && position.altitude > _lastAltitude!) {
+              _elevationGain += (position.altitude - _lastAltitude!);
+            }
           }
-        }
-        _currentPath.add(newPoint);
-        _lastAltitude = position.altitude;
-      });
-      _mapController?.animateCamera(CameraUpdate.newLatLng(newPoint));
+          _currentPath.add(newPoint);
+          _lastAltitude = position.altitude;
+        });
+        _mapController.move(newPoint, _mapController.camera.zoom);
+      }
     });
   }
 
   void _stopRun() {
     _timer?.cancel();
     _positionStream?.cancel();
-    ref.read(activePathProvider.notifier).state = _currentPath;
-    // Push stats to the post-run screen!
+    final points = _currentPath.map((p) => RoutePoint(
+      position: p, 
+      timestamp: 0, 
+      distance: 0, 
+      altitude: 0
+    )).toList();
+    ref.read(activePathProvider.notifier).state = points;
     context.push('/post-run?distance=$_totalDistanceKm&time=$_secondsElapsed&elevation=$_elevationGain');
   }
 
@@ -87,59 +92,176 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const primaryColor = Color(0xFF23A2D9);
     final minutes = (_secondsElapsed / 60).floor().toString().padLeft(2, '0');
     final seconds = (_secondsElapsed % 60).toString().padLeft(2, '0');
 
-    // Polylines: Blue for the target ghost route (if it exists), Red for where YOU actually ran!
-    Set<Polyline> polylines = {
-      Polyline(polylineId: const PolylineId('active'), points: _currentPath, color: Colors.redAccent, width: 6, zIndex: 2),
-    };
-    if (_targetRoute != null) {
-      polylines.add(Polyline(polylineId: const PolylineId('ghost'), points: _targetRoute!.path, color: Colors.blue.withOpacity(0.5), width: 8, zIndex: 1));
-    }
-
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: const CameraPosition(target: LatLng(38.7223, -9.1393), zoom: 17.0),
-            myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false,
-            polylines: polylines,
-            onMapCreated: (controller) {
-              _mapController = controller;
-              controller.setMapStyle('[{"elementType":"geometry","stylers":[{"color":"#212121"}]},{"elementType":"labels.icon","stylers":[{"visibility":"off"}]},{"elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},{"featureType":"road","elementType":"geometry.fill","stylers":[{"color":"#2c2c2c"}]},{"featureType":"water","elementType":"geometry","stylers":[{"color":"#000000"}]}]');
-            },
+          FlutterMap(
+            mapController: _mapController,
+            options: const MapOptions(
+              initialCenter: LatLng(38.7223, -9.1393),
+              initialZoom: 17.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.selfrival',
+              ),
+              PolylineLayer(
+                polylines: [
+                  if (_targetRoute != null)
+                    Polyline(
+                      points: _targetRoute!.path,
+                      color: Colors.white.withValues(alpha: 0.3),
+                      strokeWidth: 8.0,
+                    ),
+                  Polyline(
+                    points: _currentPath,
+                    color: primaryColor,
+                    strokeWidth: 6.0,
+                  ),
+                ],
+              ),
+            ],
           ),
 
+          // Header HUD (Glass)
           SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                margin: const EdgeInsets.all(16), padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(24)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_targetRoute != null) ...[
-                      Text('Racing Ghost: ${_targetRoute!.name}', style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                    ],
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: Row(
                       children: [
-                        Column(children: [const Text('TIME', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)), Text('$minutes:$seconds', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold))]),
-                        Column(children: [const Text('DISTANCE', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)), Text('${_totalDistanceKm.toStringAsFixed(2)} km', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold))]),
-                        Column(children: [const Text('ELEV', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)), Text('${_elevationGain.toStringAsFixed(0)} m', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold))]),
+                        const Icon(Icons.bolt_rounded, color: primaryColor, size: 24),
+                        const SizedBox(width: 12),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (_targetRoute?.name ?? "FREE RUN").toUpperCase(),
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                            ),
+                            const Text(
+                              "MISSION IN PROGRESS",
+                              style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    SizedBox(width: double.infinity, height: 60, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), onPressed: _stopRun, child: const Text('STOP RUN', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)))),
-                  ],
+                  ),
                 ),
+              ),
+            ),
+          ),
+
+          // Bottom Stats
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black, Colors.black.withValues(alpha: 0.8), Colors.transparent],
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 40, 20, 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _StatItem(label: 'TIME', value: '$minutes:$seconds', icon: Icons.timer_outlined),
+                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
+                            _StatItem(label: 'DISTANCE', value: _totalDistanceKm.toStringAsFixed(2), icon: Icons.directions_run_rounded),
+                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
+                            _StatItem(label: 'ALTITUDE', value: _elevationGain.toStringAsFixed(0), icon: Icons.landscape_rounded),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _StopBtn(onPressed: _stopRun),
+                ],
               ),
             ),
           )
         ],
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _StatItem({required this.label, required this.value, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 14, color: Colors.white38),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1)),
+      ],
+    );
+  }
+}
+
+class _StopBtn extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _StopBtn({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 72,
+      height: 72,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.redAccent,
+          shape: const CircleBorder(),
+          elevation: 10,
+          shadowColor: Colors.redAccent.withValues(alpha: 0.4),
+        ),
+        onPressed: onPressed,
+        child: const Icon(Icons.stop_rounded, color: Colors.white, size: 36),
       ),
     );
   }

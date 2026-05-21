@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -11,153 +12,275 @@ class StatisticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final routesAsync = ref.watch(routeProvider);
+    const primaryColor = Color(0xFF23A2D9);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PERFORMANCE', style: TextStyle(letterSpacing: 2)),
-      ),
-      body: routesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        error: (err, stack) => Center(child: Text('Error: $err')),
-        data: (routes) {
-          if (routes.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(color: const Color(0xFF23A2D9).withOpacity(0.05), shape: BoxShape.circle),
-                    child: const Icon(Icons.analytics_outlined, size: 48, color: Color(0xFF23A2D9)),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('Ready for your first run?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  const Text('Your stats will appear here.', style: TextStyle(color: Colors.grey)),
-                ],
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Immersive Background
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0D1B2A), Colors.black, Colors.black],
+                ),
               ),
-            );
-          }
+            ),
+          ),
 
-          final primaryRoute = routes.first;
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+          SafeArea(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.insights_rounded, color: Color(0xFF23A2D9), size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        primaryRoute.name.toUpperCase(),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'PERFORMANCE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          Text(
+                            'ATHLETE INSIGHTS',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                PaceLineChart(route: primaryRoute),
-
-                const SizedBox(height: 32),
-
-                const Text('INSIGHTS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
-                const SizedBox(height: 16),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: ImpactCardSmall(
-                        icon: Icons.terrain_rounded,
-                        color: Colors.orange,
-                        value: '${primaryRoute.elevationGain.toStringAsFixed(0)}m',
-                        label: 'Elevation',
+                      _BlurActionCircle(
+                        icon: Icons.arrow_back_rounded,
+                        onPressed: () => context.pop(),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ImpactCardSmall(
-                        icon: Icons.speed_rounded,
-                        color: Colors.green,
-                        value: (primaryRoute.personalBestTime > 0)
-                            ? ((primaryRoute.distance / primaryRoute.personalBestTime) * 3.6).toStringAsFixed(1)
-                            : '0.0',
-                        label: 'Avg km/h',
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
-                const SizedBox(height: 40),
-                const Text('ROUTE MASTERS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
-                const SizedBox(height: 16),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: routes.length,
-                  itemBuilder: (context, index) {
-                    final r = routes[index];
-                    final min = (r.personalBestTime / 60).floor();
-                    final sec = (r.personalBestTime % 60).toInt();
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: const Color(0xFF23A2D9).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                          child: const Icon(Icons.route_rounded, color: Color(0xFF23A2D9), size: 20),
+                Expanded(
+                  child: routesAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator(color: primaryColor)),
+                    error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.white))),
+                    data: (routes) {
+                      if (routes.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(color: primaryColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                child: const Icon(Icons.analytics_outlined, size: 48, color: primaryColor),
+                              ),
+                              const SizedBox(height: 24),
+                              const Text('NO MISSIONS RECORDED', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final primaryRoute = routes.first;
+
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _SectionLabel(label: 'ARCHIVE LEADER', icon: Icons.insights_rounded),
+                            const SizedBox(height: 16),
+                            
+                            // Glass Chart
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                child: Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(28),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        primaryRoute.name.toUpperCase(),
+                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                      ),
+                                      const SizedBox(height: 20),
+                                      SizedBox(height: 200, child: PaceLineChart(route: primaryRoute, isGlass: true)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 32),
+                            const _SectionLabel(label: 'VITAL INSIGHTS', icon: Icons.bolt_rounded),
+                            const SizedBox(height: 16),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _GlassStatCard(
+                                    icon: Icons.terrain_rounded,
+                                    color: Colors.orangeAccent,
+                                    value: '${primaryRoute.elevationGain.toStringAsFixed(0)}M',
+                                    label: 'ELEVATION',
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _GlassStatCard(
+                                    icon: Icons.speed_rounded,
+                                    color: const Color(0xFF00E676),
+                                    value: (primaryRoute.personalBestTime > 0)
+                                        ? ((primaryRoute.distance / primaryRoute.personalBestTime) * 3.6).toStringAsFixed(1)
+                                        : '0.0',
+                                    label: 'AVG KM/H',
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 40),
+                            const _SectionLabel(label: 'ROUTE MASTERY', icon: Icons.route_rounded),
+                            const SizedBox(height: 16),
+                            
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: routes.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final r = routes[index];
+                                final min = (r.personalBestTime / 60).floor();
+                                final sec = (r.personalBestTime % 60).toInt();
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.03),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(color: primaryColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                                      child: const Icon(Icons.map_rounded, color: primaryColor, size: 20),
+                                    ),
+                                    title: Text(r.name.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
+                                    subtitle: Text('${r.distance.toStringAsFixed(2)} KM • PB $min:${sec.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w700)),
+                                    onTap: () => context.push('/route-details/${r.id}'),
+                                    trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                        title: Text(r.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                        subtitle: Text('${r.distance.toStringAsFixed(2)} km • PB $min:${sec.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
-                        onTap: () => context.push('/route-details/${r.id}'),
-                        trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 }
 
-class ImpactCardSmall extends StatelessWidget {
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  const _SectionLabel({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: Colors.white38),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white38, letterSpacing: 1.5),
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassStatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String value;
   final String label;
 
-  const ImpactCardSmall({super.key, required this.icon, required this.color, required this.value, required this.label});
+  const _GlassStatCard({required this.icon, required this.color, required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 24),
+          Icon(icon, color: color, size: 20),
           const SizedBox(height: 16),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+          Text(label, style: const TextStyle(fontSize: 9, color: Colors.white38, fontWeight: FontWeight.w800, letterSpacing: 1)),
         ],
+      ),
+    );
+  }
+}
+
+class _BlurActionCircle extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _BlurActionCircle({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: IconButton(
+            icon: Icon(icon, color: Colors.white, size: 20),
+            onPressed: onPressed,
+          ),
+        ),
       ),
     );
   }
@@ -165,8 +288,9 @@ class ImpactCardSmall extends StatelessWidget {
 
 class PaceLineChart extends StatelessWidget {
   final RouteMaster route;
+  final bool isGlass;
 
-  const PaceLineChart({super.key, required this.route});
+  const PaceLineChart({super.key, required this.route, this.isGlass = false});
 
   @override
   Widget build(BuildContext context) {
@@ -194,73 +318,59 @@ class PaceLineChart extends StatelessWidget {
     }
 
     if (spots.isEmpty) {
-      spots = [
-        const FlSpot(0, 5.0),
-        FlSpot(route.distance * 0.5, 5.2),
-        FlSpot(route.distance, 5.1),
-      ];
+      spots = [const FlSpot(0, 5.0), FlSpot(route.distance * 0.5, 5.2), FlSpot(route.distance, 5.1)];
     }
 
-    return Container(
-      height: 250,
-      padding: const EdgeInsets.fromLTRB(16, 24, 24, 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
-      ),
-      child: LineChart(
-        LineChartData(
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.1), strokeWidth: 1),
-          ),
-          titlesData: FlTitlesData(
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) => Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Text('${value.toInt()}\'', style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                ),
-                reservedSize: 35,
-              ),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) => Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text('${value.toStringAsFixed(1)}k', style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                ),
-                reservedSize: 30,
-              ),
-            ),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          ),
-          borderData: FlBorderData(show: false),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: true,
-              color: const Color(0xFF23A2D9),
-              barWidth: 5,
-              isStrokeCapRound: true,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                gradient: LinearGradient(
-                  colors: [const Color(0xFF23A2D9).withOpacity(0.2), const Color(0xFF23A2D9).withOpacity(0.0)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
-          ],
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
         ),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) => Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: Text('${value.toInt()}\'', style: const TextStyle(fontSize: 8, color: Colors.white24, fontWeight: FontWeight.bold)),
+              ),
+              reservedSize: 24,
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) => Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text('${value.toStringAsFixed(1)}K', style: const TextStyle(fontSize: 8, color: Colors.white24, fontWeight: FontWeight.bold)),
+              ),
+              reservedSize: 24,
+            ),
+          ),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: const Color(0xFF23A2D9),
+            barWidth: 4,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [const Color(0xFF23A2D9).withValues(alpha: 0.2), const Color(0xFF23A2D9).withValues(alpha: 0.0)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -16,6 +17,7 @@ class TrackingState {
   final bool isOffRoute;
   final bool isRouteCompleted;
   final double? ghostTimeDelta; // NEW: Visual Coach (- is ahead, + is behind)
+  final String? coachMessage; // NEW: Textual feedback for the UI
 
   TrackingState({
     this.trackedPoints = const [],
@@ -28,6 +30,7 @@ class TrackingState {
     this.isOffRoute = false,
     this.isRouteCompleted = false,
     this.ghostTimeDelta,
+    this.coachMessage,
   });
 
   TrackingState copyWith({
@@ -41,6 +44,7 @@ class TrackingState {
     bool? isOffRoute,
     bool? isRouteCompleted,
     double? ghostTimeDelta,
+    String? coachMessage,
   }) {
     return TrackingState(
       trackedPoints: trackedPoints ?? this.trackedPoints,
@@ -53,6 +57,7 @@ class TrackingState {
       isOffRoute: isOffRoute ?? this.isOffRoute,
       isRouteCompleted: isRouteCompleted ?? this.isRouteCompleted,
       ghostTimeDelta: ghostTimeDelta ?? this.ghostTimeDelta,
+      coachMessage: coachMessage ?? this.coachMessage,
     );
   }
 }
@@ -65,16 +70,58 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   bool _hasStartedMoving = false;
   double _lastPacingFeedbackDistance = 0;
   int _lastPaceFeedbackKm = 0;
+  final List<double> _recentSpeeds = [];
 
-  TrackingNotifier() : super(TrackingState());
+  TrackingNotifier() : super(TrackingState()) {
+    _initTts();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _tts.setLanguage("en-US");
+      await _tts.setPitch(0.9); // Slightly deeper, less robotic
+      await _tts.setSpeechRate(0.55); // More natural cadence
+      
+      // Try to find a higher quality voice if available
+      List<dynamic>? voices = await _tts.getVoices;
+      if (voices != null && voices.isNotEmpty) {
+        // Prefer en-US voices that sound better (heuristic: look for "network" or "premium" in name if possible)
+        try {
+          var preferredVoice = voices.firstWhere(
+            (v) => v['locale'].toString().contains('en-US') && 
+                   (v['name'].toString().toLowerCase().contains('premium') || 
+                    v['name'].toString().toLowerCase().contains('enhanced')),
+            orElse: () => voices.firstWhere(
+              (v) => v['locale'].toString().contains('en-US'),
+              orElse: () => null,
+            ),
+          );
+          
+          if (preferredVoice != null) {
+            await _tts.setVoice({
+              "name": preferredVoice['name'].toString(),
+              "locale": preferredVoice['locale'].toString(),
+            });
+          }
+        } catch (_) {
+          // Fallback to default if filtering fails
+        }
+      }
+    } catch (e) {
+      debugPrint("TTS Init Error: $e");
+    }
+  }
 
   Future<void> startTracking({RouteMaster? targetRoute}) async {
     _targetRoute = targetRoute;
     _hasStartedMoving = false;
     _lastPacingFeedbackDistance = 0;
     _lastPaceFeedbackKm = 0;
+    _recentSpeeds.clear();
 
     state = TrackingState(isTracking: true);
+    _startTimer();
+    _speakFeedback("Run started! Push your limits.");
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -101,36 +148,18 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   void _handlePositionUpdate(Position position) {
     if (!state.isTracking) return;
 
-    bool shouldStart = false;
     if (!_hasStartedMoving) {
-      if (position.speed > 0.3) {
-        shouldStart = true;
-      } else if (state.trackedPoints.isNotEmpty) {
-        double distFromStart = Geolocator.distanceBetween(
-          state.trackedPoints.first.position.latitude,
-          state.trackedPoints.first.position.longitude,
-          position.latitude,
-          position.longitude,
-        );
-        if (distFromStart > 5) shouldStart = true;
-      } else {
-        List<RoutePoint> initialPoints = [RoutePoint(
+      _hasStartedMoving = true;
+      List<RoutePoint> initialPoints = [
+        RoutePoint(
           position: LatLng(position.latitude, position.longitude),
-          timestamp: 0,
+          timestamp: state.elapsedTime.inSeconds.toDouble(),
           distance: 0,
           altitude: position.altitude,
-        )];
-        state = state.copyWith(trackedPoints: initialPoints);
-      }
+        )
+      ];
+      state = state.copyWith(trackedPoints: initialPoints);
     }
-
-    if (!_hasStartedMoving && shouldStart) {
-      _hasStartedMoving = true;
-      _startTimer();
-      _speakFeedback("Run started! Push your limits.");
-    }
-
-    if (!_hasStartedMoving) return;
 
     final currentElapsedTime = state.elapsedTime;
     List<RoutePoint> updatedPoints = List.from(state.trackedPoints);
@@ -160,16 +189,28 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     );
     updatedPoints.add(newPoint);
 
-    // Instantaneous pace for better dashboard accuracy
+    // --- IMPROVED PACE CALCULATION ---
     double currentPace = 0.0;
-    if (addedDistance > 0) {
-      // pace in seconds per km based on the latest movement tick
-      currentPace = (1 / (addedDistance / 1000)); // 1 second per X km
-    } else if (currentElapsedTime.inSeconds > 0 && newDistance > 0) {
-      currentPace = (currentElapsedTime.inSeconds / (newDistance / 1000));
+    if (position.speed > 0.5) { // If moving faster than ~1.8 km/h
+      _recentSpeeds.add(position.speed);
+      if (_recentSpeeds.length > 8) _recentSpeeds.removeAt(0); // 8-sec window
+      
+      double avgSpeed = _recentSpeeds.reduce((a, b) => a + b) / _recentSpeeds.length;
+      currentPace = 1000 / avgSpeed; // Convert m/s to s/km
+    } else {
+      _recentSpeeds.clear();
+      // Fallback to overall average when stopped/slowed
+      if (newDistance > 0 && currentElapsedTime.inSeconds > 0) {
+        currentPace = currentElapsedTime.inSeconds / (newDistance / 1000);
+      }
     }
 
-    _checkPaceFeedback(newDistance, currentPace);
+    // Audio feedback uses session average for the KM announcement
+    final averagePace = (newDistance > 0 && currentElapsedTime.inSeconds > 0)
+        ? (currentElapsedTime.inSeconds / (newDistance / 1000))
+        : 0.0;
+    _checkPaceFeedback(newDistance, averagePace);
+    // ---------------------------------
 
     // LIVE COACH DELTA LOGIC
     double? currentDelta;
@@ -198,10 +239,22 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
         updatedCheckpoints.add(newCheckpointIndex);
         int totalCheckpoints = 10;
         if (updatedCheckpoints.length >= totalCheckpoints) {
-          isRouteCompleted = true;
-          _speakFeedback("Route completed. Outstanding job!");
-          _timer?.cancel();
-          _positionSubscription?.cancel();
+          // Verify we are actually at the finish line (within 30m of the last point)
+          final lastPoint = _targetRoute!.points.last;
+          double distanceToFinish = Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            lastPoint.position.latitude,
+            lastPoint.position.longitude,
+          );
+
+          if (distanceToFinish < 20) {
+            isRouteCompleted = true;
+            _speakFeedback("Route completed. Outstanding job!");
+            _timer?.cancel();
+            _timer = null;
+            _positionSubscription?.cancel();
+          }
         }
       }
     }
@@ -215,7 +268,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
       isOffRoute: isOffRoute,
       isRouteCompleted: isRouteCompleted,
       isTracking: !isRouteCompleted,
-      elapsedTime: currentElapsedTime,
       ghostTimeDelta: currentDelta,
     );
   }
@@ -302,6 +354,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
 
   Future<void> _speakFeedback(String message) async {
     try {
+      state = state.copyWith(coachMessage: message);
       await _tts.speak(message);
     } catch (e) {
       // ignore
@@ -311,6 +364,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   void stopTracking() {
     _positionSubscription?.cancel();
     _timer?.cancel();
+    _timer = null;
     state = state.copyWith(isTracking: false);
   }
 

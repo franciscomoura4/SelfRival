@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,16 +18,64 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isLoadingLocation = true;
   String? _selectedRouteId;
   LatLng _currentLocation = const LatLng(38.7223, -9.1393);
+  StreamSubscription<Position>? _positionSubscription;
 
   @override
   void initState() {
     super.initState();
     _getUserLocation();
+    _subscribeToLocation();
+  }
+
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToLocation() {
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      ),
+    ).listen((Position position) {
+      if (mounted) {
+        setState(() {
+          _currentLocation = LatLng(position.latitude, position.longitude);
+        });
+      }
+    });
+  }
+
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    final latTween = Tween<double>(begin: _mapController.camera.center.latitude, end: destLocation.latitude);
+    final lngTween = Tween<double>(begin: _mapController.camera.center.longitude, end: destLocation.longitude);
+    final zoomTween = Tween<double>(begin: _mapController.camera.zoom, end: destZoom);
+
+    final controller = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    final Animation<double> animation = CurvedAnimation(parent: controller, curve: Curves.fastOutSlowIn);
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
   }
 
   Future<void> _getUserLocation() async {
@@ -49,7 +98,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         setState(() {
           _currentLocation = LatLng(position.latitude, position.longitude);
         });
-        _mapController.move(_currentLocation, 14.0);
+        _animatedMapMove(_currentLocation, 14.0);
       }
     } catch (e) {
       debugPrint("Location error: $e");
@@ -63,17 +112,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final isSelected = route.id == _selectedRouteId;
       return Polyline(
         points: route.path,
-        color: isSelected ? const Color(0xFF23A2D9) : Colors.grey.withOpacity(0.4),
+        color: isSelected ? const Color(0xFF23A2D9) : Colors.grey.withValues(alpha: 0.4),
         strokeWidth: isSelected ? 6.0 : 4.0,
       );
     }).toList();
-  }
-
-  void _selectRoute(RouteMaster route) {
-    setState(() => _selectedRouteId = route.id);
-    if (route.path.isNotEmpty) {
-      _mapController.move(route.path.first, 15.0);
-    }
   }
 
   @override
@@ -83,80 +125,193 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final user = ref.watch(authProvider);
 
     return Scaffold(
+      key: _scaffoldKey,
       extendBodyBehindAppBar: true,
-      drawer: Drawer(
-        backgroundColor: Colors.grey.shade900,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(color: Color(0xFF23A2D9)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Icon(Icons.route, size: 40, color: Colors.white),
-                  const SizedBox(height: 8),
-                  const Text('My Routes', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text('${routes.length} Saved Masters', style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
-            ),
-            ...routes.map((route) {
-              final minutes = (route.personalBestTime / 60).floor();
-              final seconds = (route.personalBestTime % 60).toInt();
-              return ListTile(
-                leading: const Icon(Icons.map, color: Colors.grey),
-                title: Text(route.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: Text('${route.distance.toStringAsFixed(2)} km • PB: $minutes:${seconds.toString().padLeft(2, '0')}', style: const TextStyle(color: Colors.grey)),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.push('/route-details/${route.id}');
-                },
-              );
-            }),
-          ],
-        ),
-      ),
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? Colors.black.withValues(alpha: 0.7)
-            : Colors.white.withValues(alpha: 0.7),
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(color: Colors.transparent),
-          ),
-        ),
-        title: const Text('SELRIVAL', style: TextStyle(letterSpacing: 2)),
-        actions: [
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: const Color(0xFF23A2D9).withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: const Icon(Icons.bar_chart, size: 20, color: Color(0xFF23A2D9)),
-            ),
-            onPressed: () => context.push('/stats'),
-          ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: GestureDetector(
-              onTap: () => context.push('/profile'),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF23A2D9),
-                child: Text(
-                  (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : 'U',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+      drawer: Container(
+        width: MediaQuery.of(context).size.width * 0.85,
+        child: Drawer(
+          backgroundColor: Colors.transparent,
+          child: Stack(
+            children: [
+              // Glass Background
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          )
-        ],
+              
+              // Drawer Content
+              Column(
+                children: [
+                  // Modern Header
+                  SafeArea(
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF23A2D9).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.route_rounded, size: 28, color: Color(0xFF23A2D9)),
+                              ),
+                              const SizedBox(width: 16),
+                              const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'MY ROUTES',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  Text(
+                                    'READY TO RACE',
+                                    style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.stars_rounded, size: 14, color: Color(0xFF23A2D9)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${routes.length} SAVED MASTERS',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Divider
+                  Container(height: 1, color: Colors.white.withValues(alpha: 0.05)),
+                  
+                  // Route List
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      itemCount: routes.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final route = routes[index];
+                        final minutes = (route.personalBestTime / 60).floor();
+                        final seconds = (route.personalBestTime % 60).toInt();
+                        
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                Navigator.pop(context);
+                                context.push('/route-details/${route.id}');
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF23A2D9).withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.map_rounded, size: 18, color: Color(0xFF23A2D9)),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            route.name.toUpperCase(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              _SmallStatLabel(
+                                                icon: Icons.straighten_rounded,
+                                                label: '${route.distance.toStringAsFixed(2)} KM',
+                                              ),
+                                              const SizedBox(width: 12),
+                                              _SmallStatLabel(
+                                                icon: Icons.emoji_events_rounded,
+                                                label: '$minutes:${seconds.toString().padLeft(2, '0')}',
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
       body: Stack(
         children: [
+          // Background Map
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -166,7 +321,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             children: [
               TileLayer(
-                // This is the magic URL that makes the map look incredible and sleek black.
                 urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.selfrival',
               ),
@@ -181,16 +335,87 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     height: 20,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.blueAccent,
+                        color: const Color(0xFF23A2D9),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: const [BoxShadow(color: Colors.blue, blurRadius: 10)],
+                        boxShadow: const [BoxShadow(color: Color(0xFF23A2D9), blurRadius: 10)],
                       ),
                     ),
                   ),
                 ],
               ),
             ],
+          ),
+
+          // Floating Glass Header
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      ),
+                      child: Row(
+                        children: [
+                          _HeaderIconButton(
+                            icon: Icons.menu_rounded,
+                            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                          ),
+                          const Expanded(
+                            child: Center(
+                              child: Text(
+                                'SELFRIVAL',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 4,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          _HeaderIconButton(
+                            icon: Icons.bar_chart_rounded,
+                            onPressed: () => context.push('/stats'),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => context.push('/profile'),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF23A2D9), width: 2),
+                              ),
+                              child: CircleAvatar(
+                                radius: 16,
+                                backgroundColor: const Color(0xFF23A2D9).withValues(alpha: 0.2),
+                                child: Text(
+                                  (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : 'U',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
 
           if (routesState.isLoading)
@@ -214,6 +439,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
+          // Bottom Controls
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -224,12 +450,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   if (_isLoadingLocation)
                     const Center(child: Padding(padding: EdgeInsets.only(bottom: 16.0), child: CircularProgressIndicator(color: Color(0xFF23A2D9)))),
 
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: ClipOval(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.my_location_rounded, color: Color(0xFF23A2D9)),
+                              onPressed: () => _animatedMapMove(_currentLocation, 17.0),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
                   SizedBox(
                     height: 64,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF23A2D9),
                         foregroundColor: Colors.white,
+                        elevation: 10,
+                        shadowColor: const Color(0xFF23A2D9).withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
                       onPressed: () => context.push('/run'),
@@ -252,3 +503,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _HeaderIconButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onPressed,
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, color: Colors.white, size: 24),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallStatLabel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _SmallStatLabel({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: const Color(0xFF23A2D9).withValues(alpha: 0.6)),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
