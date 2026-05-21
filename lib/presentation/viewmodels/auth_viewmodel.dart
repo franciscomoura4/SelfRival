@@ -10,7 +10,6 @@ class AuthViewModel extends StateNotifier<AppUser?> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   AuthViewModel(this._repository) : super(null) {
-    // Restore session on startup and listen for future auth state changes
     _auth.authStateChanges().listen((firebaseUser) {
       if (firebaseUser == null) {
         state = null;
@@ -27,33 +26,48 @@ class AuthViewModel extends StateNotifier<AppUser?> {
   }
 
   Future<void> signIn(String email, String password) async {
-    await _auth.signInWithEmailAndPassword(email: email, password: password);
-    // authStateChanges listener above will update state automatically
+    try {
+      await _auth.signInWithEmailAndPassword(email: email, password: password);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'invalid-credential') {
+        throw Exception('Incorrect email or password.');
+      }
+      throw Exception(e.message ?? 'An error occurred during sign in.');
+    }
   }
 
   Future<void> signUp(String email, String password, String name) async {
-    final credential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
-    final user = credential.user!;
-    await user.updateDisplayName(name);
-    await user.reload(); // Ensure authStateChanges fires with the updated displayName
-    // Persist user profile in Realtime Database
-    await _repository.saveUserProfile(user.uid, name, email);
-    // authStateChanges listener above will update state automatically
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      final user = credential.user!;
+      await user.updateDisplayName(name);
+      await user.reload(); 
+      await _repository.saveUserProfile(user.uid, name, email);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw Exception('This email is already registered.');
+      } else if (e.code == 'weak-password') {
+        throw Exception('The password is too weak.');
+      }
+      throw Exception(e.message ?? 'An error occurred during sign up.');
+    }
   }
 
+  /// Sends a password reset email.
+  /// Due to Firebase security policies, this will succeed silently 
+  /// even if the email does not exist in the database.
   Future<void> sendPasswordReset(String email) async {
-    // NOTE: For this check to work, "Email Enumeration Protection" must be
-    // disabled in Firebase Console → Authentication → Settings → User actions.
-    // With it enabled, fetchSignInMethodsForEmail always returns [] (by design).
-    final methods = await _auth.fetchSignInMethodsForEmail(email);
-    if (methods.isEmpty) {
-      throw FirebaseAuthException(code: 'user-not-found');
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'invalid-email') {
+        throw Exception('The email format is invalid.');
+      }
+      throw Exception('An error occurred while sending the reset email.');
     }
-    await _auth.sendPasswordResetEmail(email: email);
   }
 
   Future<void> logout() async {
     await _auth.signOut();
-    // authStateChanges listener above will set state to null automatically
   }
 }
