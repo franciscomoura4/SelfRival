@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:go_router/go_router.dart';
 import '../viewmodels/route_viewmodel.dart';
+import '../viewmodels/sort_viewmodel.dart';
 import '../../data/models/route_model.dart';
 
 class StatisticsScreen extends ConsumerWidget {
@@ -12,6 +13,7 @@ class StatisticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final routesAsync = ref.watch(routeProvider);
+    final sortOption = ref.watch(sortOptionProvider);
     const primaryColor = Color(0xFF23A2D9);
 
     return Scaffold(
@@ -63,9 +65,18 @@ class StatisticsScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      _BlurActionCircle(
-                        icon: Icons.arrow_back_rounded,
-                        onPressed: () => context.pop(),
+                      Row(
+                        children: [
+                          _SortDropdown(
+                            currentOption: sortOption,
+                            onChanged: (val) => ref.read(sortOptionProvider.notifier).state = val!,
+                          ),
+                          const SizedBox(width: 12),
+                          _BlurActionCircle(
+                            icon: Icons.arrow_back_rounded,
+                            onPressed: () => context.pop(),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -93,7 +104,21 @@ class StatisticsScreen extends ConsumerWidget {
                         );
                       }
 
-                      final primaryRoute = routes.first;
+                      // Apply sorting
+                      final sortedRoutes = List<AppRoute>.from(routes);
+                      if (sortOption == SortOption.distance) {
+                        sortedRoutes.sort((a, b) => b.distance.compareTo(a.distance));
+                      } else {
+                        sortedRoutes.sort((a, b) {
+                          final timeA = a.personalBestTime;
+                          final timeB = b.personalBestTime;
+                          if (timeA == 0) return 1;
+                          if (timeB == 0) return -1;
+                          return timeA.compareTo(timeB);
+                        });
+                      }
+
+                      final primaryRoute = sortedRoutes.first;
                       final bestActivity = primaryRoute.activities.isNotEmpty
                           ? primaryRoute.activities
                               .reduce((a, b) => a.time < b.time ? a : b)
@@ -176,10 +201,10 @@ class StatisticsScreen extends ConsumerWidget {
                             ListView.separated(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
-                              itemCount: routes.length,
+                              itemCount: sortedRoutes.length,
                               separatorBuilder: (context, index) => const SizedBox(height: 12),
                               itemBuilder: (context, index) {
-                                final r = routes[index];
+                                final r = sortedRoutes[index];
                                 final min = (r.personalBestTime / 60).floor();
                                 final sec = (r.personalBestTime % 60).toInt();
                                 return Container(
@@ -213,6 +238,38 @@ class StatisticsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SortDropdown extends StatelessWidget {
+  final SortOption currentOption;
+  final ValueChanged<SortOption?> onChanged;
+
+  const _SortDropdown({required this.currentOption, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<SortOption>(
+          value: currentOption,
+          dropdownColor: const Color(0xFF1A1A1A),
+          icon: const Icon(Icons.sort_rounded, color: Colors.white54, size: 18),
+          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1),
+          items: const [
+            DropdownMenuItem(value: SortOption.distance, child: Text('DISTANCE')),
+            DropdownMenuItem(value: SortOption.time, child: Text('TIME')),
+          ],
+          onChanged: onChanged,
+        ),
       ),
     );
   }

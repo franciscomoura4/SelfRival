@@ -12,7 +12,6 @@ class TrackingState {
   final List<RoutePoint> trackedPoints;
   final double totalDistance; // in meters
   final double currentPace; // seconds per km
-  final double elevationGain;
   final Duration elapsedTime;
   final bool isTracking;
   final Set<int> passedCheckpoints;
@@ -22,13 +21,11 @@ class TrackingState {
   final String? coachMessage;
   final int stepCount;
   final double cadence; // steps per minute
-  final bool isAutoPaused;
 
   TrackingState({
     this.trackedPoints = const [],
     this.totalDistance = 0.0,
     this.currentPace = 0.0,
-    this.elevationGain = 0.0,
     this.elapsedTime = Duration.zero,
     this.isTracking = false,
     this.passedCheckpoints = const {},
@@ -38,14 +35,12 @@ class TrackingState {
     this.coachMessage,
     this.stepCount = 0,
     this.cadence = 0.0,
-    this.isAutoPaused = false,
   });
 
   TrackingState copyWith({
     List<RoutePoint>? trackedPoints,
     double? totalDistance,
     double? currentPace,
-    double? elevationGain,
     Duration? elapsedTime,
     bool? isTracking,
     Set<int>? passedCheckpoints,
@@ -55,13 +50,11 @@ class TrackingState {
     String? coachMessage,
     int? stepCount,
     double? cadence,
-    bool? isAutoPaused,
   }) {
     return TrackingState(
       trackedPoints: trackedPoints ?? this.trackedPoints,
       totalDistance: totalDistance ?? this.totalDistance,
       currentPace: currentPace ?? this.currentPace,
-      elevationGain: elevationGain ?? this.elevationGain,
       elapsedTime: elapsedTime ?? this.elapsedTime,
       isTracking: isTracking ?? this.isTracking,
       passedCheckpoints: passedCheckpoints ?? this.passedCheckpoints,
@@ -71,7 +64,6 @@ class TrackingState {
       coachMessage: coachMessage ?? this.coachMessage,
       stepCount: stepCount ?? this.stepCount,
       cadence: cadence ?? this.cadence,
-      isAutoPaused: isAutoPaused ?? this.isAutoPaused,
     );
   }
 }
@@ -91,10 +83,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
   int _stepCount = 0;
   bool _stepPeak = false;
   final List<DateTime> _stepTimestamps = [];
-  bool _hadMovementThisSecond = false;
-  int _consecutiveStillSeconds = 0;
   static const double _stepThreshold = 12.5;
-  static const double _movementDelta = 1.5; // net m/s² above gravity
 
   TrackingNotifier() : super(TrackingState()) {
     _initTts();
@@ -145,8 +134,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     _stepCount = 0;
     _stepTimestamps.clear();
     _stepPeak = false;
-    _hadMovementThisSecond = false;
-    _consecutiveStillSeconds = 0;
 
     state = TrackingState(isTracking: true);
     _startTimer();
@@ -161,7 +148,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 2,
+        distanceFilter: 0,
       ),
     ).listen(_handlePositionUpdate);
   }
@@ -170,26 +157,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     if (_timer != null) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!state.isTracking) return;
-
-      // Auto-pause detection
-      if (_hadMovementThisSecond) {
-        _consecutiveStillSeconds = 0;
-        if (state.isAutoPaused) {
-          state = state.copyWith(isAutoPaused: false);
-        }
-      } else {
-        _consecutiveStillSeconds++;
-      }
-      _hadMovementThisSecond = false;
-
-      if (_consecutiveStillSeconds >= 3 && !state.isAutoPaused) {
-        state = state.copyWith(isAutoPaused: true, stepCount: _stepCount);
-        return;
-      }
-      if (state.isAutoPaused) {
-        state = state.copyWith(stepCount: _stepCount);
-        return;
-      }
 
       // Cadence: steps in the last 30 s
       final now = DateTime.now();
@@ -228,19 +195,14 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
       } else if (_stepPeak && mag < _stepThreshold - 1.5) {
         _stepPeak = false;
       }
-
-      // Movement flag for auto-pause
-      if ((mag - 9.81).abs() > _movementDelta) {
-        _hadMovementThisSecond = true;
-      }
     }, onError: (_) {});
   }
 
   void _handlePositionUpdate(Position position) {
     if (!state.isTracking) return;
-    if (state.isAutoPaused && _hasStartedMoving) return;
 
     if (!_hasStartedMoving) {
+      _hasStartedMoving = true;
       List<RoutePoint> initialPoints = [
         RoutePoint(
           position: LatLng(position.latitude, position.longitude),
@@ -250,12 +212,12 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
         )
       ];
       state = state.copyWith(trackedPoints: initialPoints);
+      return;
     }
 
     final currentElapsedTime = state.elapsedTime;
     List<RoutePoint> updatedPoints = List.from(state.trackedPoints);
     double addedDistance = 0.0;
-    double addedElevation = 0.0;
 
     if (updatedPoints.isNotEmpty) {
       final lastPoint = updatedPoints.last;
@@ -265,10 +227,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
         position.latitude,
         position.longitude,
       );
-
-      if (position.altitude > lastPoint.altitude) {
-        addedElevation = position.altitude - lastPoint.altitude;
-      }
     }
 
     final newDistance = state.totalDistance + addedDistance;
@@ -354,7 +312,6 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
       trackedPoints: updatedPoints,
       totalDistance: newDistance,
       currentPace: currentPace,
-      elevationGain: state.elevationGain + addedElevation,
       passedCheckpoints: updatedCheckpoints,
       isOffRoute: isOffRoute,
       isRouteCompleted: isRouteCompleted,
@@ -457,7 +414,7 @@ class TrackingNotifier extends StateNotifier<TrackingState> {
     _accelSubscription?.cancel();
     _timer?.cancel();
     _timer = null;
-    state = state.copyWith(isTracking: false, isAutoPaused: false);
+    state = state.copyWith(isTracking: false);
   }
 
   @override

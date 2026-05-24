@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/tracking_service.dart';
+import '../../core/elevation_service.dart';
 import '../viewmodels/route_viewmodel.dart';
 import '../../data/models/route_model.dart';
 
@@ -95,8 +96,8 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: const LatLng(38.7223, -9.1393),
-              initialZoom: 15.0,
+              initialCenter: const LatLng(0, 0),
+              initialZoom: 2.0,
               onPositionChanged: (position, hasGesture) {
                 if (hasGesture) {
                   setState(() => _isFollowing = false);
@@ -221,37 +222,6 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (trackingState.isAutoPaused)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: Colors.amber.withValues(
-                                            alpha: 0.4)),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                          Icons.pause_circle_outline_rounded,
-                                          color: Colors.amber,
-                                          size: 12),
-                                      SizedBox(width: 5),
-                                      Text('AUTO PAUSED',
-                                          style: TextStyle(
-                                              color: Colors.amber,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: 1)),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             Row(
                               children: [
                                 Expanded(
@@ -292,7 +262,7 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.directions_walk_rounded,
+                                const Icon(Icons.directions_walk_rounded,
                                     size: 11, color: Colors.white38),
                                 const SizedBox(width: 4),
                                 Text(
@@ -317,11 +287,39 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
 
                   // Stop Button
                   _StopButton(
-                    onLongPress: () {
+                    onLongPress: () async {
                       final finalState = trackingState;
+
+                      // Show loading state
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF23A2D9))),
+                      );
+
                       ref.read(trackingProvider.notifier).stopTracking();
                       ref.read(activePathProvider.notifier).state = finalState.trackedPoints;
-                      context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=${finalState.elevationGain}&isCompleted=${finalState.isRouteCompleted}&stepCount=${finalState.stepCount}');
+
+                      double altitudeDiff = 0;
+                      if (finalState.trackedPoints.length >= 2) {
+                        final start = finalState.trackedPoints.first.position;
+                        final end = finalState.trackedPoints.last.position;
+
+                        final startElev = await ElevationService.getElevation(start.latitude, start.longitude);
+                        final endElev = await ElevationService.getElevation(end.latitude, end.longitude);
+
+                        if (startElev != null && endElev != null) {
+                          altitudeDiff = endElev - startElev;
+                        } else {
+                          // Fallback to GPS diff if API fails
+                          altitudeDiff = finalState.trackedPoints.last.altitude - finalState.trackedPoints.first.altitude;
+                        }
+                      }
+
+                      if (context.mounted) {
+                        Navigator.pop(context); // Remove loading
+                        context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=$altitudeDiff&isCompleted=${finalState.isRouteCompleted}&stepCount=${finalState.stepCount}');
+                      }
                     },
                   ),
                 ],

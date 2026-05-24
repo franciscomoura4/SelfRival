@@ -13,10 +13,10 @@ dependencies:
   
   # State Management (MVVM)
   flutter_riverpod: ^2.5.1
-  
+
   # Navigation
   go_router: ^13.2.0
-  
+
   # UI & Visualization
   fl_chart: ^0.66.0
 

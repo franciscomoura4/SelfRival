@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../core/elevation_service.dart';
 import '../viewmodels/route_viewmodel.dart';
 import '../../data/models/route_model.dart';
 
@@ -21,10 +22,8 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionStream;
 
-  final List<LatLng> _currentPath = [];
+  final List<RoutePoint> _currentPath = [];
   double _totalDistanceKm = 0.0;
-  double _elevationGain = 0.0;
-  double? _lastAltitude;
   int _secondsElapsed = 0;
   Timer? _timer;
 
@@ -51,36 +50,65 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 2),
     ).listen((Position position) {
-      final newPoint = LatLng(position.latitude, position.longitude);
+      final newPoint = RoutePoint(
+        position: LatLng(position.latitude, position.longitude),
+        timestamp: _secondsElapsed.toDouble(),
+        distance: _totalDistanceKm * 1000,
+        altitude: position.altitude,
+      );
 
       if (mounted) {
         setState(() {
           if (_currentPath.isNotEmpty) {
             final lastPoint = _currentPath.last;
-            _totalDistanceKm += (Geolocator.distanceBetween(lastPoint.latitude, lastPoint.longitude, newPoint.latitude, newPoint.longitude) / 1000);
-            if (_lastAltitude != null && position.altitude > _lastAltitude!) {
-              _elevationGain += (position.altitude - _lastAltitude!);
-            }
+            _totalDistanceKm += (Geolocator.distanceBetween(
+                  lastPoint.position.latitude,
+                  lastPoint.position.longitude,
+                  position.latitude,
+                  position.longitude,
+                ) /
+                1000);
           }
           _currentPath.add(newPoint);
-          _lastAltitude = position.altitude;
         });
-        _mapController.move(newPoint, _mapController.camera.zoom);
+        _mapController.move(newPoint.position, _mapController.camera.zoom);
       }
     });
   }
 
-  void _stopRun() {
+  void _stopRun() async {
+    // Show loading state
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF23A2D9))),
+    );
+
     _timer?.cancel();
     _positionStream?.cancel();
-    final points = _currentPath.map((p) => RoutePoint(
-      position: p, 
-      timestamp: 0, 
-      distance: 0, 
-      altitude: 0
-    )).toList();
-    ref.read(activePathProvider.notifier).state = points;
-    context.push('/post-run?distance=$_totalDistanceKm&time=$_secondsElapsed&elevation=$_elevationGain');
+
+    double altitudeDiff = 0;
+    if (_currentPath.length >= 2) {
+      final start = _currentPath.first.position;
+      final end = _currentPath.last.position;
+
+      final startElev = await ElevationService.getElevation(start.latitude, start.longitude);
+      final endElev = await ElevationService.getElevation(end.latitude, end.longitude);
+
+      if (startElev != null && endElev != null) {
+        altitudeDiff = endElev - startElev;
+      } else {
+        // Fallback to GPS diff if API fails
+        altitudeDiff = _currentPath.last.altitude - _currentPath.first.altitude;
+      }
+    }
+
+    ref.read(activePathProvider.notifier).state = _currentPath;
+
+    if (mounted) {
+      Navigator.pop(context); // Remove loading
+      context.push('/post-run?distance=$_totalDistanceKm&time=$_secondsElapsed&elevation=$altitudeDiff');
+    }
   }
 
   @override
@@ -103,8 +131,8 @@ class _RunScreenState extends ConsumerState<RunScreen> {
           FlutterMap(
             mapController: _mapController,
             options: const MapOptions(
-              initialCenter: LatLng(38.7223, -9.1393),
-              initialZoom: 17.0,
+              initialCenter: LatLng(0, 0),
+              initialZoom: 2.0,
             ),
             children: [
               TileLayer(
@@ -120,7 +148,7 @@ class _RunScreenState extends ConsumerState<RunScreen> {
                       strokeWidth: 8.0,
                     ),
                   Polyline(
-                    points: _currentPath,
+                    points: _currentPath.map((p) => p.position).toList(),
                     color: primaryColor,
                     strokeWidth: 6.0,
                   ),
@@ -204,8 +232,6 @@ class _RunScreenState extends ConsumerState<RunScreen> {
                             _StatItem(label: 'TIME', value: '$minutes:$seconds', icon: Icons.timer_outlined),
                             Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
                             _StatItem(label: 'DISTANCE', value: _totalDistanceKm.toStringAsFixed(2), icon: Icons.directions_run_rounded),
-                            Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
-                            _StatItem(label: 'ALTITUDE', value: _elevationGain.toStringAsFixed(0), icon: Icons.landscape_rounded),
                           ],
                         ),
                       ),

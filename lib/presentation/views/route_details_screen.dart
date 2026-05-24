@@ -65,8 +65,8 @@ class RouteDetailsScreen extends ConsumerWidget {
                           : null,
                       initialCenter: route.circuit.isNotEmpty
                           ? route.circuit.first.position
-                          : const LatLng(38.7223, -9.1393),
-                      initialZoom: 15.0,
+                          : const LatLng(0, 0),
+                      initialZoom: 2.0,
                       interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                     ),
                     children: [
@@ -161,11 +161,11 @@ class RouteDetailsScreen extends ConsumerWidget {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                _DetailStat(label: 'DISTANCE', value: '${route.distance.toStringAsFixed(2)}', unit: 'KM', icon: Icons.straighten_rounded),
+                                _DetailStat(label: 'DISTANCE', value: route.distance.toStringAsFixed(2), unit: 'KM', icon: Icons.straighten_rounded),
                                 Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
                                 _DetailStat(label: 'PB TIME', value: _formatTime(route.personalBestTime), unit: '', icon: Icons.emoji_events_rounded),
                                 Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
-                                _DetailStat(label: 'GAIN', value: '${route.elevationGain.toStringAsFixed(0)}', unit: 'M', icon: Icons.landscape_rounded),
+                                _DetailStat(label: 'GAIN', value: route.elevationGain.toStringAsFixed(0), unit: 'M', icon: Icons.landscape_rounded),
                               ],
                             ),
                           ),

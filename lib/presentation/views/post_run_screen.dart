@@ -192,8 +192,8 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
                               initialCameraFit: bounds != null
                                   ? CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(48))
                                   : null,
-                              initialCenter: latLngPath.isNotEmpty ? latLngPath.first : const LatLng(38.7223, -9.1393),
-                              initialZoom: 15.0,
+                              initialCenter: latLngPath.isNotEmpty ? latLngPath.first : const LatLng(0, 0),
+                              initialZoom: 2.0,
                               interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                             ),
                             children: [
@@ -231,11 +231,11 @@ class _PostRunScreenState extends ConsumerState<PostRunScreen> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
-                                  _SummaryStat(label: 'DISTANCE', value: '${widget.distance.toStringAsFixed(2)}', unit: 'KM', icon: Icons.straighten_rounded),
+                                  _SummaryStat(label: 'DISTANCE', value: widget.distance.toStringAsFixed(2), unit: 'KM', icon: Icons.straighten_rounded),
                                   Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
                                   _SummaryStat(label: 'TIME', value: '$minutes:$seconds', unit: '', icon: Icons.timer_outlined),
                                   Container(width: 1, height: 40, color: Colors.white.withValues(alpha: 0.1)),
-                                  _SummaryStat(label: 'ALTITUDE', value: '${widget.elevation.toStringAsFixed(0)}', unit: 'M', icon: Icons.landscape_rounded),
+                                  _SummaryStat(label: 'ALTITUDE', value: widget.elevation.toStringAsFixed(0), unit: 'M', icon: Icons.landscape_rounded),
                                 ],
                               ),
                             ),

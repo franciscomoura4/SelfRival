@@ -23,7 +23,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isLoadingLocation = true;
   String? _selectedRouteId;
-  LatLng _currentLocation = const LatLng(38.7223, -9.1393);
+  LatLng _currentLocation = const LatLng(0, 0);
   StreamSubscription<Position>? _positionSubscription;
 
   @override
@@ -127,7 +127,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     return Scaffold(
       key: _scaffoldKey,
       extendBodyBehindAppBar: true,
-      drawer: Container(
+      drawer: SizedBox(
         width: MediaQuery.of(context).size.width * 0.85,
         child: Drawer(
           backgroundColor: Colors.transparent,
@@ -316,7 +316,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _currentLocation,
-              initialZoom: 13.0,
+              initialZoom: 2.0,
               onTap: (_, __) => setState(() => _selectedRouteId = null),
             ),
             children: [
