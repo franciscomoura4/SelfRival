@@ -85,7 +85,10 @@ class StatisticsScreen extends ConsumerWidget {
                 Expanded(
                   child: routesAsync.when(
                     loading: () => const Center(child: CircularProgressIndicator(color: primaryColor)),
-                    error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.white))),
+                    error: (err, stack) => _ErrorView(
+                      message: err.toString().replaceAll('Exception: ', ''),
+                      onRetry: () => ref.refresh(routeProvider),
+                    ),
                     data: (routes) {
                       if (routes.isEmpty) {
                         return Center(
@@ -291,6 +294,60 @@ class _SectionLabel extends StatelessWidget {
           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white38, letterSpacing: 1.5),
         ),
       ],
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.wifi_off_rounded, color: Colors.redAccent, size: 40),
+                  const SizedBox(height: 16),
+                  const Text('SYNC INTERRUPTED',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  const SizedBox(height: 8),
+                  Text(message.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('RETRY SYNC', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF23A2D9),
+                      backgroundColor: const Color(0xFF23A2D9).withValues(alpha: 0.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

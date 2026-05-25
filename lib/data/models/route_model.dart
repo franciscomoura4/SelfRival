@@ -163,10 +163,12 @@ class AppRoute {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'distance': distance,
       'elevationGain': elevationGain,
       'circuit': circuit.map((p) => p.toJson()).toList(),
+      'activities': { for (var a in activities) a.id : a.toJson() },
     };
   }
 }

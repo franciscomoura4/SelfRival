@@ -2,7 +2,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router.dart';
+import 'core/ui_feedback_service.dart';
 import 'firebase_options.dart';
+
+final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   // Essential for loading native plugins like Maps/Sensors before UI draws
@@ -20,8 +23,23 @@ class SelfRivalApp extends ConsumerWidget {
     // Watch the router provider so it reacts to login/logout state changes
     final goRouter = ref.watch(routerProvider);
 
+    ref.listen(uiFeedbackProvider, (previous, next) {
+      if (next != null) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(next.message),
+            backgroundColor: next.isError ? Colors.redAccent : const Color(0xFF23A2D9),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        ref.read(uiFeedbackProvider.notifier).clear();
+      }
+    });
+
     return MaterialApp.router(
       title: 'SelfRival',
+      scaffoldMessengerKey: scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

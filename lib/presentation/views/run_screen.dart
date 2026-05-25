@@ -88,26 +88,30 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     _positionStream?.cancel();
 
     double altitudeDiff = 0;
-    if (_currentPath.length >= 2) {
-      final start = _currentPath.first.position;
-      final end = _currentPath.last.position;
+    try {
+      if (_currentPath.length >= 2) {
+        final start = _currentPath.first.position;
+        final end = _currentPath.last.position;
 
-      final startElev = await ElevationService.getElevation(start.latitude, start.longitude);
-      final endElev = await ElevationService.getElevation(end.latitude, end.longitude);
+        final startElev = await ElevationService.getElevation(start.latitude, start.longitude);
+        final endElev = await ElevationService.getElevation(end.latitude, end.longitude);
 
-      if (startElev != null && endElev != null) {
-        altitudeDiff = endElev - startElev;
-      } else {
-        // Fallback to GPS diff if API fails
-        altitudeDiff = _currentPath.last.altitude - _currentPath.first.altitude;
+        if (startElev != null && endElev != null) {
+          altitudeDiff = endElev - startElev;
+        } else {
+          // Fallback to GPS diff if API fails
+          altitudeDiff = _currentPath.last.altitude - _currentPath.first.altitude;
+        }
       }
-    }
+    } catch (e) {
+      // Fallback
+    } finally {
+      ref.read(activePathProvider.notifier).state = _currentPath;
 
-    ref.read(activePathProvider.notifier).state = _currentPath;
-
-    if (mounted) {
-      Navigator.pop(context); // Remove loading
-      context.push('/post-run?distance=$_totalDistanceKm&time=$_secondsElapsed&elevation=$altitudeDiff');
+      if (mounted) {
+        Navigator.pop(context); // Remove loading
+        context.push('/post-run?distance=$_totalDistanceKm&time=$_secondsElapsed&elevation=$altitudeDiff');
+      }
     }
   }
 

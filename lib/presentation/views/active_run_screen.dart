@@ -301,24 +301,28 @@ class _ActiveRunScreenState extends ConsumerState<ActiveRunScreen> with TickerPr
                       ref.read(activePathProvider.notifier).state = finalState.trackedPoints;
 
                       double altitudeDiff = 0;
-                      if (finalState.trackedPoints.length >= 2) {
-                        final start = finalState.trackedPoints.first.position;
-                        final end = finalState.trackedPoints.last.position;
+                      try {
+                        if (finalState.trackedPoints.length >= 2) {
+                          final start = finalState.trackedPoints.first.position;
+                          final end = finalState.trackedPoints.last.position;
 
-                        final startElev = await ElevationService.getElevation(start.latitude, start.longitude);
-                        final endElev = await ElevationService.getElevation(end.latitude, end.longitude);
+                          final startElev = await ElevationService.getElevation(start.latitude, start.longitude);
+                          final endElev = await ElevationService.getElevation(end.latitude, end.longitude);
 
-                        if (startElev != null && endElev != null) {
-                          altitudeDiff = endElev - startElev;
-                        } else {
-                          // Fallback to GPS diff if API fails
-                          altitudeDiff = finalState.trackedPoints.last.altitude - finalState.trackedPoints.first.altitude;
+                          if (startElev != null && endElev != null) {
+                            altitudeDiff = endElev - startElev;
+                          } else {
+                            // Fallback to GPS diff if API fails
+                            altitudeDiff = finalState.trackedPoints.last.altitude - finalState.trackedPoints.first.altitude;
+                          }
                         }
-                      }
-
-                      if (context.mounted) {
-                        Navigator.pop(context); // Remove loading
-                        context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=$altitudeDiff&isCompleted=${finalState.isRouteCompleted}&stepCount=${finalState.stepCount}');
+                      } catch (e) {
+                        // Silent fallback for elevation service
+                      } finally {
+                        if (context.mounted) {
+                          Navigator.pop(context); // Remove loading
+                          context.go('/post-run?distance=${finalState.totalDistance / 1000}&time=${finalState.elapsedTime.inSeconds}&elevation=$altitudeDiff&isCompleted=${finalState.isRouteCompleted}&stepCount=${finalState.stepCount}');
+                        }
                       }
                     },
                   ),

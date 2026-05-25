@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/route_model.dart';
 import '../../data/rest_repository.dart';
+import '../../data/local_storage_service.dart';
 import '../../core/similarity_service.dart';
+import '../../core/ui_feedback_service.dart';
 import 'auth_viewmodel.dart';
 
 final restRepositoryProvider = Provider((ref) => RestRepository());
@@ -11,19 +13,45 @@ final targetRouteIdProvider = StateProvider<String?>((ref) => null);
 class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
   final RestRepository _repository;
   final String _uid;
+  final Ref _ref;
 
-  RouteViewModel(this._repository, this._uid)
+  RouteViewModel(this._repository, this._uid, this._ref)
       : super(const AsyncValue.loading()) {
-    fetchRoutes();
+    _init();
   }
 
-  Future<void> fetchRoutes() async {
-    state = const AsyncValue.loading();
+  Future<void> _init() async {
+    // 1. Load from cache immediately (Non-blocking)
+    if (_uid.isNotEmpty) {
+      final cached = await LocalStorageService.loadRoutes(_uid);
+      if (cached.isNotEmpty) {
+        state = AsyncValue.data(cached);
+      }
+    }
+    
+    // 2. Start background sync
+    fetchRoutes(isBackground: state.hasValue);
+  }
+
+  Future<void> fetchRoutes({bool isBackground = false}) async {
+    if (!isBackground) {
+      state = const AsyncValue.loading();
+    }
+    
     try {
       final routes = await _repository.getRoutes(_uid);
       state = AsyncValue.data(routes);
+      // Update cache
+      if (_uid.isNotEmpty) {
+        LocalStorageService.saveRoutes(_uid, routes);
+      }
     } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
+      if (isBackground) {
+        // Don't show full error UI, just notify via SnackBar
+        _ref.read(uiFeedbackProvider.notifier).showMessage('Working Offline: Cloud sync failed.', isError: false);
+      } else {
+        state = AsyncValue.error(e, stackTrace);
+      }
     }
   }
 
@@ -76,8 +104,7 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
         state = AsyncValue.data([...state.value!, routeWithActivity]);
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error saving free run: $e');
+      _ref.read(uiFeedbackProvider.notifier).showMessage('Cloud Save Failed: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
     }
   }
 
@@ -163,8 +190,7 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
         return false;
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error saving ghost run: $e');
+      _ref.read(uiFeedbackProvider.notifier).showMessage('Sync Failed: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
       return false;
     }
   }
@@ -177,8 +203,7 @@ class RouteViewModel extends StateNotifier<AsyncValue<List<AppRoute>>> {
             state.value!.where((r) => r.id != routeId).toList());
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error deleting route: $e');
+      _ref.read(uiFeedbackProvider.notifier).showMessage('Delete Failed: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
     }
   }
 }
@@ -187,7 +212,7 @@ final routeProvider =
     StateNotifierProvider<RouteViewModel, AsyncValue<List<AppRoute>>>((ref) {
   final user = ref.watch(authProvider);
   if (user == null) {
-    return RouteViewModel(ref.read(restRepositoryProvider), '');
+    return RouteViewModel(ref.read(restRepositoryProvider), '', ref);
   }
-  return RouteViewModel(ref.read(restRepositoryProvider), user.id);
+  return RouteViewModel(ref.read(restRepositoryProvider), user.id, ref);
 });

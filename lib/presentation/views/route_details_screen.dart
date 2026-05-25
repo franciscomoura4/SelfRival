@@ -22,7 +22,10 @@ class RouteDetailsScreen extends ConsumerWidget {
       backgroundColor: Colors.black,
       body: routesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: primaryColor)),
-        error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.white))),
+        error: (err, stack) => _DetailsErrorView(
+          message: err.toString().replaceAll('Exception: ', ''),
+          onRetry: () => ref.refresh(routeProvider),
+        ),
         data: (routes) {
           AppRoute? route;
           try {
@@ -411,6 +414,87 @@ class RouteDetailsScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DetailsErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _DetailsErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0D1B2A), Colors.black],
+                ),
+              ),
+            ),
+          ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 40),
+                        const SizedBox(height: 16),
+                        const Text('MISSION FAILED',
+                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                        const SizedBox(height: 8),
+                        Text(message.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: () => context.pop(),
+                              child: const Text('ABORT', style: TextStyle(color: Colors.white38, fontWeight: FontWeight.w800)),
+                            ),
+                            const SizedBox(width: 16),
+                            TextButton.icon(
+                              onPressed: onRetry,
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('RETRY', style: TextStyle(fontWeight: FontWeight.w900)),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF23A2D9),
+                                backgroundColor: const Color(0xFF23A2D9).withValues(alpha: 0.1),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
